@@ -3,10 +3,106 @@ package usecases
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/message"
+	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
 	usecaseImpl "github.com/svbnbyrk/go-message-dispatcher/internal/core/usecases"
 )
+
+// testError is a simple error type for testing
+type testError struct {
+	message string
+}
+
+func (e *testError) Error() string {
+	return e.message
+}
+
+// Mock webhook service for testing
+type mockWebhookService struct {
+	shouldFail bool
+}
+
+func (m *mockWebhookService) SendMessage(ctx context.Context, request services.WebhookRequest) (*services.WebhookResponse, error) {
+	if m.shouldFail {
+		return nil, &testError{message: "webhook send failed"}
+	}
+	return &services.WebhookResponse{
+		Success:    true,
+		ExternalID: "webhook-123-" + request.MessageID,
+	}, nil
+}
+
+func (m *mockWebhookService) IsHealthy(ctx context.Context) error {
+	return nil
+}
+
+// Mock cache service for testing
+type mockCacheService struct {
+	data       map[string]interface{}
+	shouldFail bool
+}
+
+func newMockCacheService() *mockCacheService {
+	return &mockCacheService{
+		data: make(map[string]interface{}),
+	}
+}
+
+func (m *mockCacheService) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if m.shouldFail {
+		return &testError{message: "cache set failed"}
+	}
+	m.data[key] = value
+	return nil
+}
+
+func (m *mockCacheService) Get(ctx context.Context, key string) (interface{}, error) {
+	if m.shouldFail {
+		return nil, &testError{message: "cache get failed"}
+	}
+	if value, exists := m.data[key]; exists {
+		return value, nil
+	}
+	return nil, &testError{message: "key not found"}
+}
+
+func (m *mockCacheService) Delete(ctx context.Context, key string) error {
+	if m.shouldFail {
+		return &testError{message: "cache delete failed"}
+	}
+	delete(m.data, key)
+	return nil
+}
+
+func (m *mockCacheService) Exists(ctx context.Context, key string) (bool, error) {
+	if m.shouldFail {
+		return false, &testError{message: "cache exists failed"}
+	}
+	_, exists := m.data[key]
+	return exists, nil
+}
+
+func (m *mockCacheService) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if m.shouldFail {
+		return &testError{message: "cache setJSON failed"}
+	}
+	m.data[key] = value
+	return nil
+}
+
+func (m *mockCacheService) GetJSON(ctx context.Context, key string, dest interface{}) error {
+	if m.shouldFail {
+		return &testError{message: "cache getJSON failed"}
+	}
+	// Simplified implementation for testing
+	return nil
+}
+
+func (m *mockCacheService) IsHealthy(ctx context.Context) error {
+	return nil
+}
 
 func TestMessageProcessingService_ProcessPendingMessages(t *testing.T) {
 	tests := []struct {
@@ -68,7 +164,7 @@ func TestMessageProcessingService_ProcessPendingMessages(t *testing.T) {
 				mockRepo.shouldFailOp = tt.shouldFailRepo
 			}
 
-			service := usecaseImpl.NewMessageProcessingService(mockRepo)
+			service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheService())
 			ctx := context.Background()
 
 			result, err := service.ProcessPendingMessages(ctx, tt.batchSize)
@@ -160,7 +256,7 @@ func TestMessageProcessingService_GetProcessingStatus(t *testing.T) {
 				mockRepo.shouldFailOp = tt.shouldFailRepo
 			}
 
-			service := usecaseImpl.NewMessageProcessingService(mockRepo)
+			service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheService())
 			ctx := context.Background()
 
 			result, err := service.GetProcessingStatus(ctx)
@@ -225,7 +321,7 @@ func TestMessageProcessingService_ProcessMessage_Integration(t *testing.T) {
 			testMessages = append(testMessages, testMsg)
 		}
 
-		service := usecaseImpl.NewMessageProcessingService(mockRepo)
+		service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheService())
 		ctx := context.Background()
 
 		// Process the messages

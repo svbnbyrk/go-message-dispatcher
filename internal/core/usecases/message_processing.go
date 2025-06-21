@@ -7,18 +7,27 @@ import (
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/errors"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/message"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/repositories"
+	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/usecases"
 )
 
 // messageProcessingService implements MessageProcessingUseCase
 type messageProcessingService struct {
-	messageRepo repositories.MessageRepository
+	messageRepo    repositories.MessageRepository
+	webhookService services.WebhookService
+	cacheService   services.CacheService
 }
 
 // NewMessageProcessingService creates a new message processing use case
-func NewMessageProcessingService(messageRepo repositories.MessageRepository) usecases.MessageProcessingUseCase {
+func NewMessageProcessingService(
+	messageRepo repositories.MessageRepository,
+	webhookService services.WebhookService,
+	cacheService services.CacheService,
+) usecases.MessageProcessingUseCase {
 	return &messageProcessingService{
-		messageRepo: messageRepo,
+		messageRepo:    messageRepo,
+		webhookService: webhookService,
+		cacheService:   cacheService,
 	}
 }
 
@@ -58,18 +67,20 @@ func (s *messageProcessingService) ProcessPendingMessages(ctx context.Context, b
 	return result, nil
 }
 
-// processMessage processes a single message (simulated webhook call)
+// processMessage processes a single message using webhook service
 func (s *messageProcessingService) processMessage(ctx context.Context, msg *message.Message) error {
-	// TODO: In Phase 4, this will be replaced with actual webhook service call
-	// For now, we'll simulate the webhook call
+	// Prepare webhook request
+	webhookReq := services.WebhookRequest{
+		PhoneNumber: msg.PhoneNumber.String(),
+		Content:     msg.Content.String(),
+		MessageID:   msg.ID.String(),
+	}
 
-	// Simulate processing time and potential failure
-	time.Sleep(100 * time.Millisecond) // Simulate network call
-
-	// Simulate 80% success rate for testing
-	if time.Now().UnixNano()%5 == 0 {
-		// Simulate failure - handle retry logic
-		if err := msg.IncrementRetry(); err != nil {
+	// Send message via webhook
+	webhookResp, err := s.webhookService.SendMessage(ctx, webhookReq)
+	if err != nil {
+		// Handle webhook failure - increment retry count
+		if retryErr := msg.IncrementRetry(); retryErr != nil {
 			// Max retries exceeded, mark as failed
 			if markErr := msg.MarkAsFailed(); markErr != nil {
 				return errors.NewBusinessError("failed to mark message as failed: %v", markErr)
@@ -77,22 +88,36 @@ func (s *messageProcessingService) processMessage(ctx context.Context, msg *mess
 		}
 
 		// Update message in repository
-		if err := s.messageRepo.Update(ctx, msg); err != nil {
-			return err
+		if updateErr := s.messageRepo.Update(ctx, msg); updateErr != nil {
+			return updateErr
 		}
 
-		return errors.NewBusinessError("simulated webhook failure")
+		return errors.NewBusinessErrorWithCause(err, "webhook call failed for message %s", msg.ID)
 	}
 
-	// Simulate successful webhook call
-	externalID := "webhook-" + time.Now().Format("20060102150405")
-	if err := msg.MarkAsSent(externalID); err != nil {
+	// Webhook success - mark message as sent
+	if err := msg.MarkAsSent(webhookResp.ExternalID); err != nil {
 		return errors.NewBusinessError("failed to mark message as sent: %v", err)
 	}
 
 	// Update message in repository
 	if err := s.messageRepo.Update(ctx, msg); err != nil {
 		return err
+	}
+
+	// Cache the sent message information
+	cacheData := map[string]interface{}{
+		"message_id":  msg.ID.String(),
+		"external_id": webhookResp.ExternalID,
+		"sent_at":     msg.SentAt,
+		"status":      string(msg.Status),
+	}
+
+	cacheKey := "message:" + msg.ID.String()
+	if err := s.cacheService.SetJSON(ctx, cacheKey, cacheData, 30*24*time.Hour); err != nil {
+		// Cache failure shouldn't break the flow, just log it
+		// In a real application, you might want to use a logger here
+		_ = err // Ignore cache errors for now
 	}
 
 	return nil

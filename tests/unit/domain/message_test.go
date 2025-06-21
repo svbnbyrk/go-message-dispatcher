@@ -4,6 +4,7 @@ import (
 	"errors"
 	"testing"
 
+	domainErrors "github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/errors"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/message"
 )
 
@@ -150,8 +151,9 @@ func TestMessage_IncrementRetry(t *testing.T) {
 		t.Error("expected error when exceeding max retries")
 	}
 
-	if !errors.As(err, &message.MaxRetriesExceededError{}) {
-		t.Errorf("expected MaxRetriesExceededError, got %T", err)
+	var businessErr domainErrors.BusinessError
+	if !errors.As(err, &businessErr) {
+		t.Errorf("expected BusinessError, got %T", err)
 	}
 }
 
@@ -213,8 +215,11 @@ func TestPhoneNumber_Validate(t *testing.T) {
 				t.Errorf("expected error: %v, got error: %v", tt.expectError, hasError)
 			}
 
-			if hasError && !errors.As(err, &message.ValidationError{}) {
-				t.Errorf("expected ValidationError, got %T", err)
+			if hasError {
+				var validationErr domainErrors.ValidationError
+				if !errors.As(err, &validationErr) {
+					t.Errorf("expected ValidationError, got %T", err)
+				}
 			}
 		})
 	}
@@ -241,8 +246,11 @@ func TestContent_Validate(t *testing.T) {
 				t.Errorf("expected error: %v, got error: %v", tt.expectError, hasError)
 			}
 
-			if hasError && !errors.As(err, &message.ValidationError{}) {
-				t.Errorf("expected ValidationError, got %T", err)
+			if hasError {
+				var validationErr domainErrors.ValidationError
+				if !errors.As(err, &validationErr) {
+					t.Errorf("expected ValidationError, got %T", err)
+				}
 			}
 		})
 	}
