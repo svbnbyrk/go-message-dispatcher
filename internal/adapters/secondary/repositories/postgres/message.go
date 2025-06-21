@@ -2,15 +2,13 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"errors"
-	"fmt"
 	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/errors"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/message"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/repositories"
 )
@@ -51,12 +49,12 @@ func (r *MessageRepository) Create(ctx context.Context, msg *message.Message) er
 		ToSql()
 
 	if err != nil {
-		return fmt.Errorf("failed to build insert query: %w", err)
+		return errors.NewRepositoryError("failed to build insert query: %v", err)
 	}
 
 	_, err = r.pool.Exec(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to create message: %w", err)
+		return err
 	}
 
 	return nil
@@ -74,16 +72,13 @@ func (r *MessageRepository) GetByID(ctx context.Context, id message.MessageID) (
 		ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to build select query: %w", err)
+		return nil, errors.NewRepositoryError("failed to build select query: %v", err)
 	}
 
 	row := r.pool.QueryRow(ctx, query, args...)
 	msg, err := r.scanMessage(row)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("message not found: %s", id.String())
-		}
-		return nil, fmt.Errorf("failed to get message: %w", err)
+		return nil, errors.MapNotFoundError(err, "message")
 	}
 
 	return msg, nil
@@ -91,6 +86,10 @@ func (r *MessageRepository) GetByID(ctx context.Context, id message.MessageID) (
 
 // GetPendingMessages retrieves pending messages with limit
 func (r *MessageRepository) GetPendingMessages(ctx context.Context, limit int) ([]*message.Message, error) {
+	if limit <= 0 {
+		return nil, errors.NewValidationError("limit must be greater than zero")
+	}
+
 	query, args, err := r.qb.
 		Select(
 			"id", "phone_number", "content", "status",
@@ -103,12 +102,12 @@ func (r *MessageRepository) GetPendingMessages(ctx context.Context, limit int) (
 		ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to build select query: %w", err)
+		return nil, errors.NewRepositoryError("failed to build pending messages query: %v", err)
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query pending messages: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -117,42 +116,47 @@ func (r *MessageRepository) GetPendingMessages(ctx context.Context, limit int) (
 
 // Update updates an existing message
 func (r *MessageRepository) Update(ctx context.Context, msg *message.Message) error {
-	query, args, err := r.qb.
+	updateQuery := r.qb.
 		Update("messages").
 		Set("phone_number", msg.PhoneNumber.String()).
 		Set("content", msg.Content.String()).
 		Set("status", msg.Status.String()).
-		Set("external_id", msg.ExternalID).
 		Set("retry_count", msg.RetryCount).
 		Set("updated_at", msg.UpdatedAt).
 		Set("sent_at", msg.SentAt).
-		Where(squirrel.Eq{"id": msg.ID.String()}).
-		ToSql()
+		Where(squirrel.Eq{"id": msg.ID.String()})
 
+	// Set external_id if message is sent
+	if msg.ExternalID != nil {
+		updateQuery = updateQuery.Set("external_id", *msg.ExternalID)
+	}
+
+	query, args, err := updateQuery.ToSql()
 	if err != nil {
-		return fmt.Errorf("failed to build update query: %w", err)
+		return errors.NewRepositoryError("failed to build update query: %v", err)
 	}
 
 	result, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to update message: %w", err)
+		return err
 	}
 
-	rowsAffected := result.RowsAffected()
-	if rowsAffected == 0 {
-		return fmt.Errorf("message not found: %s", msg.ID.String())
+	if result.RowsAffected() == 0 {
+		return errors.NewNotFoundError("message not found for update")
 	}
 
 	return nil
 }
 
-// GetSentMessages retrieves sent messages with pagination
-func (r *MessageRepository) GetSentMessages(ctx context.Context, pagination repositories.Pagination) ([]*message.Message, error) {
-	return r.GetByStatus(ctx, message.StatusSent, pagination)
-}
-
 // GetByStatus retrieves messages by status with pagination
 func (r *MessageRepository) GetByStatus(ctx context.Context, status message.Status, pagination repositories.Pagination) ([]*message.Message, error) {
+	if pagination.Limit <= 0 {
+		return nil, errors.NewValidationError("limit must be greater than zero")
+	}
+	if pagination.Offset < 0 {
+		return nil, errors.NewValidationError("offset cannot be negative")
+	}
+
 	query, args, err := r.qb.
 		Select(
 			"id", "phone_number", "content", "status",
@@ -166,39 +170,12 @@ func (r *MessageRepository) GetByStatus(ctx context.Context, status message.Stat
 		ToSql()
 
 	if err != nil {
-		return nil, fmt.Errorf("failed to build select query: %w", err)
+		return nil, errors.NewRepositoryError("failed to build status query: %v", err)
 	}
 
 	rows, err := r.pool.Query(ctx, query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("failed to query messages by status: %w", err)
-	}
-	defer rows.Close()
-
-	return r.scanMessages(rows)
-}
-
-// GetByPhoneNumber retrieves messages by phone number with pagination
-func (r *MessageRepository) GetByPhoneNumber(ctx context.Context, phoneNumber message.PhoneNumber, pagination repositories.Pagination) ([]*message.Message, error) {
-	query, args, err := r.qb.
-		Select(
-			"id", "phone_number", "content", "status",
-			"external_id", "retry_count", "created_at", "updated_at", "sent_at",
-		).
-		From("messages").
-		Where(squirrel.Eq{"phone_number": phoneNumber.String()}).
-		OrderBy("created_at DESC").
-		Limit(uint64(pagination.Limit)).
-		Offset(uint64(pagination.Offset)).
-		ToSql()
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to build select query: %w", err)
-	}
-
-	rows, err := r.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to query messages by phone number: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -214,19 +191,19 @@ func (r *MessageRepository) CountByStatus(ctx context.Context, status message.St
 		ToSql()
 
 	if err != nil {
-		return 0, fmt.Errorf("failed to build count query: %w", err)
+		return 0, errors.NewRepositoryError("failed to build count query: %v", err)
 	}
 
 	var count int64
-	err = r.pool.QueryRow(ctx, query, args...).Scan(&count)
-	if err != nil {
-		return 0, fmt.Errorf("failed to count messages: %w", err)
+	row := r.pool.QueryRow(ctx, query, args...)
+	if err := row.Scan(&count); err != nil {
+		return 0, err
 	}
 
 	return count, nil
 }
 
-// DeleteByID deletes a message by ID (for testing purposes)
+// DeleteByID deletes a message by its ID
 func (r *MessageRepository) DeleteByID(ctx context.Context, id message.MessageID) error {
 	query, args, err := r.qb.
 		Delete("messages").
@@ -234,91 +211,193 @@ func (r *MessageRepository) DeleteByID(ctx context.Context, id message.MessageID
 		ToSql()
 
 	if err != nil {
-		return fmt.Errorf("failed to build delete query: %w", err)
+		return errors.NewRepositoryError("failed to build delete query: %v", err)
 	}
 
 	result, err := r.pool.Exec(ctx, query, args...)
 	if err != nil {
-		return fmt.Errorf("failed to delete message: %w", err)
+		return err
 	}
 
-	rowsAffected := result.RowsAffected()
-	if rowsAffected == 0 {
-		return fmt.Errorf("message not found: %s", id.String())
+	if result.RowsAffected() == 0 {
+		return errors.NewNotFoundError("message not found for deletion")
 	}
 
 	return nil
 }
 
-// scanMessage scans a single row into a Message struct
+// GetSentMessages retrieves sent messages with pagination
+func (r *MessageRepository) GetSentMessages(ctx context.Context, pagination repositories.Pagination) ([]*message.Message, error) {
+	if pagination.Limit <= 0 {
+		return nil, errors.NewValidationError("limit must be greater than zero")
+	}
+	if pagination.Offset < 0 {
+		return nil, errors.NewValidationError("offset cannot be negative")
+	}
+
+	query, args, err := r.qb.
+		Select(
+			"id", "phone_number", "content", "status",
+			"external_id", "retry_count", "created_at", "updated_at", "sent_at",
+		).
+		From("messages").
+		Where(squirrel.Eq{"status": message.StatusSent.String()}).
+		OrderBy("sent_at DESC").
+		Limit(uint64(pagination.Limit)).
+		Offset(uint64(pagination.Offset)).
+		ToSql()
+
+	if err != nil {
+		return nil, errors.NewRepositoryError("failed to build sent messages query: %v", err)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanMessages(rows)
+}
+
+// GetByPhoneNumber retrieves messages by phone number with pagination
+func (r *MessageRepository) GetByPhoneNumber(ctx context.Context, phoneNumber message.PhoneNumber, pagination repositories.Pagination) ([]*message.Message, error) {
+	if pagination.Limit <= 0 {
+		return nil, errors.NewValidationError("limit must be greater than zero")
+	}
+	if pagination.Offset < 0 {
+		return nil, errors.NewValidationError("offset cannot be negative")
+	}
+
+	query, args, err := r.qb.
+		Select(
+			"id", "phone_number", "content", "status",
+			"external_id", "retry_count", "created_at", "updated_at", "sent_at",
+		).
+		From("messages").
+		Where(squirrel.Eq{"phone_number": phoneNumber.String()}).
+		OrderBy("created_at DESC").
+		Limit(uint64(pagination.Limit)).
+		Offset(uint64(pagination.Offset)).
+		ToSql()
+
+	if err != nil {
+		return nil, errors.NewRepositoryError("failed to build phone number query: %v", err)
+	}
+
+	rows, err := r.pool.Query(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return r.scanMessages(rows)
+}
+
+// scanMessage scans a single row into a message
 func (r *MessageRepository) scanMessage(row pgx.Row) (*message.Message, error) {
 	var (
-		id          string
-		phoneNumber string
-		content     string
-		status      string
-		externalID  sql.NullString
-		retryCount  int
-		createdAt   time.Time
-		updatedAt   time.Time
-		sentAt      sql.NullTime
+		idStr      string
+		phoneStr   string
+		contentStr string
+		statusStr  string
+		externalID *string
+		retryCount int
+		createdAt  time.Time
+		updatedAt  time.Time
+		sentAt     *time.Time
 	)
 
 	err := row.Scan(
-		&id, &phoneNumber, &content, &status,
+		&idStr, &phoneStr, &contentStr, &statusStr,
 		&externalID, &retryCount, &createdAt, &updatedAt, &sentAt,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	// Convert database values to domain types
-	phoneNumberVO, err := message.NewPhoneNumber(phoneNumber)
-	if err != nil {
-		return nil, fmt.Errorf("invalid phone number in database: %w", err)
-	}
-
-	contentVO, err := message.NewContent(content)
-	if err != nil {
-		return nil, fmt.Errorf("invalid content in database: %w", err)
-	}
-
-	msg := &message.Message{
-		ID:          message.MessageID(id),
-		PhoneNumber: phoneNumberVO,
-		Content:     contentVO,
-		Status:      message.Status(status),
-		RetryCount:  retryCount,
-		CreatedAt:   createdAt,
-		UpdatedAt:   updatedAt,
-	}
-
-	if externalID.Valid {
-		msg.ExternalID = &externalID.String
-	}
-
-	if sentAt.Valid {
-		msg.SentAt = &sentAt.Time
-	}
-
-	return msg, nil
+	return r.buildMessage(idStr, phoneStr, contentStr, statusStr, externalID, retryCount, createdAt, updatedAt, sentAt)
 }
 
-// scanMessages scans multiple rows into Message structs
+// scanMessages scans multiple rows into messages
 func (r *MessageRepository) scanMessages(rows pgx.Rows) ([]*message.Message, error) {
 	var messages []*message.Message
 
 	for rows.Next() {
-		msg, err := r.scanMessage(rows)
+		var (
+			idStr      string
+			phoneStr   string
+			contentStr string
+			statusStr  string
+			externalID *string
+			retryCount int
+			createdAt  time.Time
+			updatedAt  time.Time
+			sentAt     *time.Time
+		)
+
+		err := rows.Scan(
+			&idStr, &phoneStr, &contentStr, &statusStr,
+			&externalID, &retryCount, &createdAt, &updatedAt, &sentAt,
+		)
 		if err != nil {
 			return nil, err
 		}
+
+		msg, err := r.buildMessage(idStr, phoneStr, contentStr, statusStr, externalID, retryCount, createdAt, updatedAt, sentAt)
+		if err != nil {
+			return nil, err
+		}
+
 		messages = append(messages, msg)
 	}
 
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating rows: %w", err)
+		return nil, err
 	}
 
 	return messages, nil
+}
+
+// buildMessage builds a message from scanned values
+func (r *MessageRepository) buildMessage(
+	idStr, phoneStr, contentStr, statusStr string,
+	externalID *string,
+	retryCount int,
+	createdAt, updatedAt time.Time,
+	sentAt *time.Time,
+) (*message.Message, error) {
+	// Create value objects
+	phoneNumber, err := message.NewPhoneNumber(phoneStr)
+	if err != nil {
+		return nil, errors.NewRepositoryError("invalid phone number from database: %v", err)
+	}
+
+	content, err := message.NewContent(contentStr)
+	if err != nil {
+		return nil, errors.NewRepositoryError("invalid content from database: %v", err)
+	}
+
+	status := message.Status(statusStr)
+	if !status.IsValid() {
+		return nil, errors.NewRepositoryError("invalid status from database: %s", statusStr)
+	}
+
+	// Create and populate message
+	msg := &message.Message{
+		ID:          message.MessageID(idStr),
+		PhoneNumber: phoneNumber,
+		Content:     content,
+		Status:      status,
+		RetryCount:  retryCount,
+		CreatedAt:   createdAt,
+		UpdatedAt:   updatedAt,
+		SentAt:      sentAt,
+	}
+
+	if externalID != nil {
+		msg.ExternalID = externalID
+	}
+
+	return msg, nil
 }
