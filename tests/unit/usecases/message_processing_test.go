@@ -29,8 +29,7 @@ func (m *mockWebhookService) SendMessage(ctx context.Context, request services.W
 		return nil, &testError{message: "webhook send failed"}
 	}
 	return &services.WebhookResponse{
-		Success:    true,
-		ExternalID: "webhook-123-" + request.MessageID,
+		MessageID: "webhook-123-message-id",
 	}, nil
 }
 

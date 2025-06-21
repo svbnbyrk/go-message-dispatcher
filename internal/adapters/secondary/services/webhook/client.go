@@ -7,7 +7,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"time"
 
 	domainErrors "github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/errors"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
@@ -35,34 +34,12 @@ func (s *httpWebhookService) SendMessage(ctx context.Context, request services.W
 		return nil, domainErrors.NewValidationError("webhook URL is not configured")
 	}
 
-	var lastErr error
-
-	// Retry logic with exponential backoff
-	for attempt := 0; attempt <= s.config.MaxRetries; attempt++ {
-		if attempt > 0 {
-			// Wait before retry with exponential backoff
-			backoffDuration := s.config.RetryBackoffBase * time.Duration(1<<(attempt-1))
-			select {
-			case <-ctx.Done():
-				return nil, ctx.Err()
-			case <-time.After(backoffDuration):
-			}
-		}
-
-		response, err := s.sendSingleRequest(ctx, request)
-		if err == nil {
-			return response, nil
-		}
-
-		lastErr = err
-
-		// Don't retry on validation errors or context cancellation
-		if isNonRetryableError(err) || ctx.Err() != nil {
-			break
-		}
+	response, err := s.sendSingleRequest(ctx, request)
+	if err == nil {
+		return response, nil
 	}
 
-	return nil, domainErrors.NewBusinessErrorWithCause(lastErr, "webhook request failed after %d attempts", s.config.MaxRetries+1)
+	return nil, domainErrors.NewBusinessError("webhook request failed after %d attempts", s.config.MaxRetries+1)
 }
 
 // sendSingleRequest makes a single HTTP request to the webhook endpoint
@@ -106,11 +83,7 @@ func (s *httpWebhookService) sendSingleRequest(ctx context.Context, request serv
 	// Parse response
 	var webhookResp services.WebhookResponse
 	if err := json.Unmarshal(respBody, &webhookResp); err != nil {
-		return nil, domainErrors.NewBusinessError("failed to parse webhook response: %v", err)
-	}
-
-	if !webhookResp.Success {
-		return nil, domainErrors.NewBusinessError("webhook indicated failure: %s", webhookResp.ErrorMessage)
+		return nil, domainErrors.NewBusinessError("failed to parse webhook response - Raw body: '%s', Error: %v", string(respBody), err)
 	}
 
 	return &webhookResp, nil

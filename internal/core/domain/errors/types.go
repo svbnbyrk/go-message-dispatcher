@@ -7,21 +7,25 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
-// Domain Error Interfaces - Business-specific error types
+// Domain Error Interfaces - Business-specific error types with marker methods
 type ValidationError interface {
 	error
+	IsValidationError() // Marker method
 }
 
 type NotFoundError interface {
 	error
+	IsNotFoundError() // Marker method
 }
 
 type BusinessError interface {
 	error
+	IsBusinessError() // Marker method
 }
 
 type RepositoryError interface {
 	error
+	IsRepositoryError() // Marker method
 }
 
 // Concrete implementations
@@ -30,32 +34,36 @@ type validationError struct {
 	cause   error
 }
 
-func (e validationError) Error() string { return e.message }
-func (e validationError) Unwrap() error { return e.cause }
+func (e validationError) Error() string      { return e.message }
+func (e validationError) Unwrap() error      { return e.cause }
+func (e validationError) IsValidationError() {} // Marker method implementation
 
 type notFoundError struct {
 	message string
 	cause   error
 }
 
-func (e notFoundError) Error() string { return e.message }
-func (e notFoundError) Unwrap() error { return e.cause }
+func (e notFoundError) Error() string    { return e.message }
+func (e notFoundError) Unwrap() error    { return e.cause }
+func (e notFoundError) IsNotFoundError() {} // Marker method implementation
 
 type businessError struct {
 	message string
 	cause   error
 }
 
-func (e businessError) Error() string { return e.message }
-func (e businessError) Unwrap() error { return e.cause }
+func (e businessError) Error() string    { return e.message }
+func (e businessError) Unwrap() error    { return e.cause }
+func (e businessError) IsBusinessError() {} // Marker method implementation
 
 type repositoryError struct {
 	message string
 	cause   error
 }
 
-func (e repositoryError) Error() string { return e.message }
-func (e repositoryError) Unwrap() error { return e.cause }
+func (e repositoryError) Error() string      { return e.message }
+func (e repositoryError) Unwrap() error      { return e.cause }
+func (e repositoryError) IsRepositoryError() {} // Marker method implementation
 
 // Factory Functions - sprintf style
 func NewValidationError(format string, args ...interface{}) ValidationError {

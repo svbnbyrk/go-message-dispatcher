@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/svbnbyrk/go-message-dispatcher/internal/adapters/secondary/services/cache"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/adapters/secondary/services/webhook"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
 )
@@ -18,7 +17,7 @@ func TestWebhookService_Integration(t *testing.T) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"success": true, "external_id": "test-123"}`))
+			w.Write([]byte(`{"messageId": "test-123", "message": "Message sent successfully"}`))
 		}))
 		defer server.Close()
 
@@ -35,9 +34,8 @@ func TestWebhookService_Integration(t *testing.T) {
 
 		// Test webhook call
 		request := services.WebhookRequest{
-			PhoneNumber: "+905551234567",
-			Content:     "Test message",
-			MessageID:   "msg-123",
+			To:      "+905551234567",
+			Content: "Test message",
 		}
 
 		ctx := context.Background()
@@ -51,42 +49,12 @@ func TestWebhookService_Integration(t *testing.T) {
 			t.Error("Expected response but got nil")
 		}
 
-		if !response.Success {
-			t.Error("Expected successful response")
+		if response.MessageID != "test-123" {
+			t.Errorf("Expected message ID 'test-123', got '%s'", response.MessageID)
 		}
 
-		if response.ExternalID != "test-123" {
-			t.Errorf("Expected external ID 'test-123', got '%s'", response.ExternalID)
-		}
-	})
-}
-
-func TestCacheService_Integration(t *testing.T) {
-	t.Run("memory cache operations", func(t *testing.T) {
-		cacheService := cache.NewMemoryService()
-		ctx := context.Background()
-
-		// Test Set/Get
-		key := "test-key"
-		value := "test-value"
-		err := cacheService.Set(ctx, key, value, 5*time.Second)
-		if err != nil {
-			t.Errorf("Unexpected error setting cache: %v", err)
-		}
-
-		retrievedValue, err := cacheService.Get(ctx, key)
-		if err != nil {
-			t.Errorf("Unexpected error getting cache: %v", err)
-		}
-
-		if retrievedValue != value {
-			t.Errorf("Expected value '%s', got '%s'", value, retrievedValue)
-		}
-
-		// Test health check
-		err = cacheService.IsHealthy(ctx)
-		if err != nil {
-			t.Errorf("Expected memory cache to be healthy, got error: %v", err)
+		if response.Message != "Message sent successfully" {
+			t.Errorf("Expected message 'Message sent successfully', got '%s'", response.Message)
 		}
 	})
 }

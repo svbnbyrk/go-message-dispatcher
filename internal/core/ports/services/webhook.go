@@ -7,16 +7,14 @@ import (
 
 // WebhookRequest represents the data sent to webhook endpoint
 type WebhookRequest struct {
-	PhoneNumber string `json:"phone_number"`
-	Content     string `json:"content"`
-	MessageID   string `json:"message_id"`
+	To      string `json:"to"`
+	Content string `json:"content"`
 }
 
 // WebhookResponse represents the response from webhook endpoint
 type WebhookResponse struct {
-	Success      bool   `json:"success"`
-	ExternalID   string `json:"external_id"`
-	ErrorMessage string `json:"error_message,omitempty"`
+	MessageID string `json:"messageId"`
+	Message   string `json:"message"`
 }
 
 // WebhookService handles sending messages to external webhook endpoints

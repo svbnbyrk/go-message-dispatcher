@@ -71,21 +71,15 @@ func (s *messageProcessingService) ProcessPendingMessages(ctx context.Context, b
 func (s *messageProcessingService) processMessage(ctx context.Context, msg *message.Message) error {
 	// Prepare webhook request
 	webhookReq := services.WebhookRequest{
-		PhoneNumber: msg.PhoneNumber.String(),
-		Content:     msg.Content.String(),
-		MessageID:   msg.ID.String(),
+		To:      msg.PhoneNumber.String(),
+		Content: msg.Content.String(),
 	}
 
 	// Send message via webhook
 	webhookResp, err := s.webhookService.SendMessage(ctx, webhookReq)
 	if err != nil {
-		// Handle webhook failure - increment retry count
-		if retryErr := msg.IncrementRetry(); retryErr != nil {
-			// Max retries exceeded, mark as failed
-			if markErr := msg.MarkAsFailed(); markErr != nil {
-				return errors.NewBusinessError("failed to mark message as failed: %v", markErr)
-			}
-		}
+		// Mark message as failed
+		msg.MarkAsFailed()
 
 		// Update message in repository
 		if updateErr := s.messageRepo.Update(ctx, msg); updateErr != nil {
@@ -96,7 +90,7 @@ func (s *messageProcessingService) processMessage(ctx context.Context, msg *mess
 	}
 
 	// Webhook success - mark message as sent
-	if err := msg.MarkAsSent(webhookResp.ExternalID); err != nil {
+	if err := msg.MarkAsSent(webhookResp.MessageID); err != nil {
 		return errors.NewBusinessError("failed to mark message as sent: %v", err)
 	}
 
@@ -107,10 +101,10 @@ func (s *messageProcessingService) processMessage(ctx context.Context, msg *mess
 
 	// Cache the sent message information
 	cacheData := map[string]interface{}{
-		"message_id":  msg.ID.String(),
-		"external_id": webhookResp.ExternalID,
-		"sent_at":     msg.SentAt,
-		"status":      string(msg.Status),
+		"message_id": msg.ID.String(),
+		"messageId":  webhookResp.MessageID,
+		"sent_at":    msg.SentAt,
+		"status":     string(msg.Status),
 	}
 
 	cacheKey := "message:" + msg.ID.String()
