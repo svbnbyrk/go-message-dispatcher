@@ -51,11 +51,11 @@ func (p PhoneNumber) Validate() error {
 	cleanPhone = strings.ReplaceAll(cleanPhone, ")", "")
 
 	if len(cleanPhone) < minPhoneLength || len(cleanPhone) > maxPhoneLength {
-		return NewValidationError("phone number must be between 10 and 15 digits")
+		return NewPhoneNumberValidationError(phone)
 	}
 
 	if !phoneRegex.MatchString(cleanPhone) {
-		return NewValidationError("invalid phone number format")
+		return NewPhoneNumberValidationError(phone)
 	}
 
 	return nil
@@ -85,11 +85,12 @@ func (c Content) Validate() error {
 	content := strings.TrimSpace(string(c))
 
 	if content == "" {
-		return NewValidationError("message content cannot be empty")
+		return NewEmptyContentError()
 	}
 
-	if utf8.RuneCountInString(content) > maxContentLength {
-		return NewValidationError("message content exceeds maximum length of 160 characters")
+	length := utf8.RuneCountInString(content)
+	if length > maxContentLength {
+		return NewContentTooLongError(length, maxContentLength)
 	}
 
 	return nil
