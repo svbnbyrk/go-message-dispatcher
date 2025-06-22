@@ -8,6 +8,11 @@ app:
   api_key: "test-api-key-123"
   log_level: "info"  # debug, info, warn, error
 
+logging:
+  level: "info"
+  environment: "development"
+  enable_json: false  # true for production
+
 database:
   host: "localhost"
   port: 5432

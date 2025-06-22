@@ -10,6 +10,7 @@ import (
 // Config holds the complete application configuration
 type Config struct {
 	App       AppConfig       `mapstructure:"app"`
+	Logging   LoggingConfig   `mapstructure:"logging"`
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Redis     RedisConfig     `mapstructure:"redis"`
 	Webhook   WebhookConfig   `mapstructure:"webhook"`
@@ -24,6 +25,13 @@ type AppConfig struct {
 	Port        int    `mapstructure:"port"`
 	APIKey      string `mapstructure:"api_key"`
 	LogLevel    string `mapstructure:"log_level"`
+}
+
+// LoggingConfig contains logging configuration
+type LoggingConfig struct {
+	Level       string `mapstructure:"level"`
+	Environment string `mapstructure:"environment"`
+	EnableJSON  bool   `mapstructure:"enable_json"`
 }
 
 // DatabaseConfig contains database connection configuration
@@ -117,6 +125,11 @@ func setDefaults() {
 	viper.SetDefault("app.api_key", "test-api-key-123")
 	viper.SetDefault("app.log_level", "info")
 
+	// Logging defaults
+	viper.SetDefault("logging.level", "info")
+	viper.SetDefault("logging.environment", "development")
+	viper.SetDefault("logging.enable_json", false)
+
 	// Database defaults
 	viper.SetDefault("database.host", "localhost")
 	viper.SetDefault("database.port", 5432)
@@ -159,6 +172,11 @@ func setupEnvBindings() {
 	viper.BindEnv("app.port", "PORT")
 	viper.BindEnv("app.api_key", "API_KEY")
 	viper.BindEnv("app.log_level", "LOG_LEVEL")
+
+	// Logging env bindings
+	viper.BindEnv("logging.level", "LOG_LEVEL")
+	viper.BindEnv("logging.environment", "LOG_ENV")
+	viper.BindEnv("logging.enable_json", "LOG_JSON")
 
 	// Database env bindings
 	viper.BindEnv("database.host", "DB_HOST")

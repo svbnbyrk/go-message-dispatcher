@@ -27,8 +27,8 @@ func SetupRouter(
 	// Basic middleware
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+	r.Use(httpMiddleware.RequestLogging()) // Structured logging with correlation IDs
+	r.Use(httpMiddleware.PanicRecovery())  // Panic recovery with structured logging
 	r.Use(middleware.Timeout(60 * time.Second))
 
 	// CORS middleware (simple)
@@ -36,7 +36,7 @@ func SetupRouter(
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token")
+			w.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, X-CSRF-Token, X-Correlation-ID")
 
 			if r.Method == "OPTIONS" {
 				return
@@ -46,7 +46,7 @@ func SetupRouter(
 		})
 	})
 
-	// Health check (no auth required)
+	// Health endpoint (no auth required)
 	r.Get("/health", healthHandler.Health)
 
 	// API routes with authentication
