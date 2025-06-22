@@ -24,47 +24,59 @@ This project follows **Hexagonal Architecture** principles:
 
 ## Prerequisites
 
-- Go 1.24.4 or higher
+- Go 1.24+ or higher
 - Docker and Docker Compose
-- PostgreSQL (via Docker)
-- Redis (via Docker)
+- Make (for using Makefile commands)
 
 ## Quick Start
 
-### 1. Clone the repository
+### 1. Clone and Setup
 ```bash
 git clone https://github.com/svbnbyrk/go-message-dispatcher.git
 cd go-message-dispatcher
 ```
 
-### 2. Development Environment Setup
+### 2. Start Development Environment
 ```bash
-# Start local dependencies (PostgreSQL + Redis)
-make dev-up
-
-# Run database migrations
-make migrate-up
-
-# Install dependencies
-go mod tidy
+# Start all dependencies (PostgreSQL + Redis) and run the application
+make dev-up && make dev
 ```
 
-### 3. Environment Configuration
-```bash
-# Copy example environment file
-cp .env.example .env
+That's it! The application will be running at `http://localhost:8080`
 
-# Edit configuration as needed
-vim .env
+### Configuration
+
+Before running, update the `config.yaml` file with your settings:
+
+```yaml
+# Key configurations to update:
+app:
+  api_key: "your-secure-api-key-here"  # Change this!
+
+webhook:
+  url: "https://your-webhook-endpoint.com"  # Your webhook URL
+  auth_token: "your-webhook-auth-token"     # Optional webhook auth
+
+database:
+  # Database settings (defaults work for development)
+  password: "msg_dispatcher_pass123"
+
+redis:
+  # Redis settings (defaults work for development)
+  password: ""
 ```
 
-### 4. Run the application
-```bash
-# Development mode
-make dev
+### API Access
 
-# Or run directly
-go run cmd/server/main.go
+Once running, you can access:
+- **API Base**: `http://localhost:8080`
+- **Swagger UI**: `http://localhost:8080/swagger/index.html`
+- **Health Check**: `http://localhost:8080/health`
+
+**Authentication**: All API endpoints (except `/health`) require Bearer token:
+```bash
+curl -H "Authorization: Bearer your-secure-api-key-here" \
+     http://localhost:8080/api/v1/messages
 ```
 
 ## Project Structure
@@ -78,7 +90,8 @@ go-message-dispatcher/
 │   └── shared/            # Shared utilities
 ├── tests/                 # Test files
 ├── deployments/           # Docker and deployment configs
-└── docs/                  # Documentation
+├── docs/                  # Documentation
+└── config.yaml           # Main configuration file
 ```
 
 ## API Documentation
@@ -108,18 +121,14 @@ The API is fully documented with Swagger/OpenAPI 3.0. Once the server is running
 #### System
 - `GET /health` - Health check endpoint
 
-#### Authentication
-All API endpoints (except `/health`) require Bearer token authentication:
-```bash
-Authorization: Bearer your-api-key
-```
-
 ## Development Commands
 
 ```bash
-# Development
+# Quick Start
+make dev-up           # Start dependencies (PostgreSQL + Redis)
 make dev              # Start development server
-make dev-up           # Start development dependencies (Docker)
+
+# Development
 make dev-down         # Stop development dependencies
 
 # Database
@@ -131,15 +140,12 @@ make migrate-create   # Create new migration file
 make swagger          # Generate and serve swagger docs
 make swagger-gen      # Generate swagger documentation
 make swagger-serve    # Generate docs and start server
-make swagger-clean    # Clean generated swagger files
 
 # Testing
 make test             # Run all tests
 make test-unit        # Run unit tests only
 make test-integration # Run integration tests
 make test-coverage    # Run tests with coverage
-make test-race-condition  # Test race condition prevention
-make test-deployment      # Test deployment scenario
 
 # Code Quality
 make lint             # Run linter
@@ -149,6 +155,31 @@ make vet              # Run go vet
 # Build
 make build            # Build application
 make docker-build     # Build Docker image
+```
+
+## Example Usage
+
+### 1. Create a Message
+```bash
+curl -X POST http://localhost:8080/api/v1/messages \
+  -H "Authorization: Bearer your-secure-api-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "phoneNumber": "+905551234567",
+    "content": "Hello, this is a test message!"
+  }'
+```
+
+### 2. List Messages
+```bash
+curl -H "Authorization: Bearer your-secure-api-key-here" \
+     "http://localhost:8080/api/v1/messages?limit=10&offset=0"
+```
+
+### 3. Check Processing Status
+```bash
+curl -H "Authorization: Bearer your-secure-api-key-here" \
+     http://localhost:8080/api/v1/messaging/status
 ```
 
 ## Distributed Deployment
@@ -181,30 +212,37 @@ make test-race-condition
 make test-deployment
 ```
 
-## Configuration
+## Configuration Reference
 
-Key environment variables:
+All configuration is managed through `config.yaml`. Key settings:
 
-```bash
-# Database
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=message_dispatcher
-DB_USER=postgres
-DB_PASSWORD=postgres
+```yaml
+app:
+  api_key: "your-secure-api-key-here"  # API authentication key
+  port: 8080                           # Server port
 
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
+database:
+  host: "localhost"                    # Database host
+  port: 5432                          # Database port
+  username: "msg_dispatcher_user"      # Database username
+  password: "msg_dispatcher_pass123"   # Database password
+  database: "message_dispatcher"       # Database name
 
-# Webhook
-WEBHOOK_URL=https://your-webhook-endpoint.com
-WEBHOOK_TIMEOUT=30s
+redis:
+  host: "localhost"                    # Redis host
+  port: 6379                          # Redis port
+  password: ""                        # Redis password (empty for no auth)
 
-# Processing
-BATCH_SIZE=2
-PROCESSING_INTERVAL=2m
-MAX_RETRIES=3
+webhook:
+  url: "https://your-webhook-endpoint.com"  # Target webhook URL
+  auth_token: ""                           # Optional webhook authentication
+  timeout: "30s"                           # Request timeout
+  max_retries: 3                           # Retry attempts
+
+scheduler:
+  enabled: true                        # Enable automatic processing
+  interval: "2m"                       # Processing interval
+  batch_size: 2                        # Messages per batch
 ```
 
 ## License
