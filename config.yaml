@@ -1,0 +1,41 @@
+# Message Dispatcher Configuration
+
+app:
+  name: "Message Dispatcher"
+  version: "1.0.0"
+  environment: "development"  # development, staging, production
+  port: 8080
+  api_key: "test-api-key-123"
+  log_level: "info"  # debug, info, warn, error
+
+database:
+  host: "localhost"
+  port: 5432
+  username: "msg_dispatcher_user"
+  password: "msg_dispatcher_pass123"
+  database: "message_dispatcher"
+  ssl_mode: "disable"  # disable, require, verify-ca, verify-full
+  max_connections: 25
+  min_connections: 5
+  max_conn_lifetime: "1h"
+  max_conn_idle_time: "30m"
+  health_check_period: "1m"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+  ttl: "5m"
+
+webhook:
+  url: "https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae"
+  auth_token: ""
+  timeout: "30s"
+  max_retries: 3
+  retry_backoff_base: "100ms"
+
+scheduler:
+  enabled: true
+  interval: "2m"  # How often to process messages
+  batch_size: 2   # Number of messages to process per batch 

@@ -18,14 +18,35 @@ import (
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
 	schedulerServices "github.com/svbnbyrk/go-message-dispatcher/internal/core/services"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/usecases"
+	"github.com/svbnbyrk/go-message-dispatcher/internal/shared/config"
 )
 
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Database configuration
-	dbConfig := postgres.DefaultDatabaseConfig()
+	// Load configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatal("Failed to load configuration:", err)
+	}
+
+	fmt.Printf("🚀 Starting %s v%s (%s)\n", cfg.App.Name, cfg.App.Version, cfg.App.Environment)
+
+	// Database configuration from config
+	dbConfig := postgres.DatabaseConfig{
+		Host:              cfg.Database.Host,
+		Port:              cfg.Database.Port,
+		Username:          cfg.Database.Username,
+		Password:          cfg.Database.Password,
+		Database:          cfg.Database.Database,
+		SSLMode:           cfg.Database.SSLMode,
+		MaxConnections:    cfg.Database.MaxConnections,
+		MinConnections:    cfg.Database.MinConnections,
+		MaxConnLifetime:   cfg.Database.MaxConnLifetime,
+		MaxConnIdleTime:   cfg.Database.MaxConnIdleTime,
+		HealthCheckPeriod: cfg.Database.HealthCheckPeriod,
+	}
 
 	// Create database connection pool
 	pool, err := postgres.NewConnectionPool(ctx, dbConfig)
@@ -39,22 +60,23 @@ func main() {
 	// Create real repository
 	messageRepo := postgres.NewMessageRepository(pool)
 
-	// Create webhook service
+	// Create webhook service from config
 	webhookConfig := services.WebhookConfig{
-		URL:              "https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae", // Default webhook URL
-		Timeout:          30 * time.Second,
-		MaxRetries:       3,
-		RetryBackoffBase: 100 * time.Millisecond,
+		URL:              cfg.Webhook.URL,
+		AuthToken:        cfg.Webhook.AuthToken,
+		Timeout:          cfg.Webhook.Timeout,
+		MaxRetries:       cfg.Webhook.MaxRetries,
+		RetryBackoffBase: cfg.Webhook.RetryBackoffBase,
 	}
 	webhookService := webhook.NewWebhookService(webhookConfig)
 
-	// Cache configuration
+	// Cache configuration from config
 	cacheConfig := services.CacheConfig{
-		Host:     "localhost",
-		Port:     6379,
-		Password: "",
-		DB:       0,
-		TTL:      5 * time.Minute,
+		Host:     cfg.Redis.Host,
+		Port:     cfg.Redis.Port,
+		Password: cfg.Redis.Password,
+		DB:       cfg.Redis.DB,
+		TTL:      cfg.Redis.TTL,
 	}
 	cacheService := cache.NewRedisService(cacheConfig)
 
@@ -62,10 +84,10 @@ func main() {
 	messageManagement := usecases.NewMessageManagementService(messageRepo)
 	messageProcessing := usecases.NewMessageProcessingService(messageRepo, webhookService, cacheService)
 
-	// Create background processing scheduler
+	// Create background processing scheduler from config
 	schedulerConfig := schedulerServices.SchedulerConfig{
-		Interval:  2 * time.Minute, // Process every 2 minutes
-		BatchSize: 2,               // Process 2 messages per batch
+		Interval:  cfg.Scheduler.Interval,
+		BatchSize: cfg.Scheduler.BatchSize,
 	}
 	scheduler := schedulerServices.NewProcessingScheduler(messageProcessing, schedulerConfig)
 
@@ -74,26 +96,32 @@ func main() {
 	healthHandler := handlers.NewHealthHandler()
 	schedulerHandler := handlers.NewSchedulerHandler(scheduler, schedulerConfig.Interval, schedulerConfig.BatchSize)
 
-	// Setup router
+	// Setup router with config
 	routerConfig := routes.RouterConfig{
-		APIKey: "test-api-key-123", // In real app, this would come from environment
+		APIKey: cfg.App.APIKey,
 	}
 	router := routes.SetupRouter(routerConfig, messageHandler, healthHandler, schedulerHandler)
 
-	// Start background scheduler
-	if err := scheduler.Start(ctx); err != nil {
-		log.Fatal("Failed to start background scheduler:", err)
+	// Start background scheduler if enabled
+	if cfg.Scheduler.Enabled {
+		if err := scheduler.Start(ctx); err != nil {
+			log.Fatal("Failed to start background scheduler:", err)
+		}
+		fmt.Printf("⏰ Background scheduler started (interval: %v, batch size: %d)\n",
+			cfg.Scheduler.Interval, cfg.Scheduler.BatchSize)
+	} else {
+		fmt.Println("⏸️ Background scheduler is disabled")
 	}
 
 	// Start server
 	server := &http.Server{
-		Addr:    ":8080",
+		Addr:    fmt.Sprintf(":%d", cfg.App.Port),
 		Handler: router,
 	}
 
 	// Start server in a goroutine
 	go func() {
-		fmt.Println("🚀 Server starting on :8080")
+		fmt.Printf("🚀 Server starting on port %d\n", cfg.App.Port)
 		fmt.Println("📚 API Documentation:")
 		fmt.Println("  GET  /health                     - Health check")
 		fmt.Println("  POST /api/v1/messages            - Create message")
@@ -105,11 +133,12 @@ func main() {
 		fmt.Println("  POST /api/v1/scheduler/start     - Start background scheduler")
 		fmt.Println("  POST /api/v1/scheduler/stop      - Stop background scheduler")
 		fmt.Println("")
-		fmt.Println("🔑 Auth: Bearer test-api-key-123")
-		fmt.Println("💾 Database: PostgreSQL connected")
-		fmt.Println("🗄️  Cache: Redis configured")
-		fmt.Println("🔗 Webhook: https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae")
-		fmt.Println("⏰ Background Processing: Every 2 minutes (batch size: 2)")
+		fmt.Printf("🔑 Auth: Bearer %s\n", cfg.App.APIKey)
+		fmt.Printf("💾 Database: %s@%s:%d/%s\n", cfg.Database.Username, cfg.Database.Host, cfg.Database.Port, cfg.Database.Database)
+		fmt.Printf("🗄️  Cache: %s:%d (DB: %d)\n", cfg.Redis.Host, cfg.Redis.Port, cfg.Redis.DB)
+		fmt.Printf("🔗 Webhook: %s\n", cfg.Webhook.URL)
+		fmt.Printf("📊 Environment: %s\n", cfg.App.Environment)
+		fmt.Printf("📝 Log Level: %s\n", cfg.App.LogLevel)
 
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatal("Server failed to start:", err)
@@ -124,8 +153,10 @@ func main() {
 	fmt.Println("🛑 Shutting down server...")
 
 	// Stop background scheduler first
-	if err := scheduler.Stop(); err != nil {
-		log.Printf("⚠️ Error stopping scheduler: %v", err)
+	if cfg.Scheduler.Enabled {
+		if err := scheduler.Stop(); err != nil {
+			log.Printf("⚠️ Error stopping scheduler: %v", err)
+		}
 	}
 
 	// Graceful shutdown with timeout
