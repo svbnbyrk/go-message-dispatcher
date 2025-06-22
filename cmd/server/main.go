@@ -1,3 +1,36 @@
+// Package main provides the Message Dispatcher API server
+//
+// @title           Message Dispatcher API
+// @version         1.0.0
+// @description     Automatic message sending system with retry mechanism and background processing
+// @termsOfService  https://github.com/svbnbyrk/go-message-dispatcher
+//
+// @contact.name   API Support
+// @contact.url    https://github.com/svbnbyrk/go-message-dispatcher/issues
+// @contact.email  support@example.com
+//
+// @license.name  MIT
+// @license.url   https://opensource.org/licenses/MIT
+//
+// @host      localhost:8080
+// @BasePath  /api/v1
+//
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
+// @description Type "Bearer" followed by a space and JWT token.
+//
+// @tag.name messages
+// @tag.description Message management operations
+//
+// @tag.name messaging
+// @tag.description Message processing operations
+//
+// @tag.name scheduler
+// @tag.description Background scheduler management
+//
+// @tag.name health
+// @tag.description Health check operations
 package main
 
 import (

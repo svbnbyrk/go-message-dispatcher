@@ -1,0 +1,494 @@
+basePath: /api/v1
+definitions:
+  dto.CreateMessageRequest:
+    properties:
+      content:
+        example: Hello World! This is a test message.
+        type: string
+      phoneNumber:
+        example: "+905551234567"
+        type: string
+    required:
+    - content
+    - phoneNumber
+    type: object
+  dto.ErrorResponse:
+    properties:
+      error:
+        example: Validation failed
+        type: string
+      message:
+        example: phoneNumber is required
+        type: string
+    type: object
+  dto.HealthResponse:
+    properties:
+      status:
+        enum:
+        - ok
+        - error
+        example: ok
+        type: string
+      uptime:
+        example: 2h30m45s
+        type: string
+      version:
+        example: 1.0.0
+        type: string
+    type: object
+  dto.MessageResponse:
+    properties:
+      content:
+        example: Hello World! This is a test message.
+        type: string
+      createdAt:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      externalId:
+        example: whatsapp_msg_12345
+        type: string
+      id:
+        example: 123e4567-e89b-12d3-a456-426614174000
+        type: string
+      phoneNumber:
+        example: "+905551234567"
+        type: string
+      retryCount:
+        example: 0
+        maximum: 3
+        minimum: 0
+        type: integer
+      sentAt:
+        example: "2024-01-15T10:32:00Z"
+        type: string
+      status:
+        enum:
+        - pending
+        - sent
+        - failed
+        example: pending
+        type: string
+      updatedAt:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+    type: object
+  dto.ProcessingResultResponse:
+    properties:
+      errors:
+        example:
+        - '["webhook timeout for message 123"]'
+        items:
+          type: string
+        type: array
+      failedCount:
+        example: 1
+        type: integer
+      processedCount:
+        example: 5
+        type: integer
+      successCount:
+        example: 4
+        type: integer
+    type: object
+  dto.ProcessingStatusResponse:
+    properties:
+      failedToday:
+        example: 2
+        type: integer
+      isProcessing:
+        example: false
+        type: boolean
+      lastProcessedAt:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      nextProcessingAt:
+        example: "2024-01-15T10:32:00Z"
+        type: string
+      pendingCount:
+        example: 5
+        type: integer
+      processedToday:
+        example: 25
+        type: integer
+    type: object
+  dto.SchedulerStatusResponse:
+    properties:
+      batchSize:
+        example: 2
+        type: integer
+      interval:
+        example: 2m
+        type: string
+      isCurrentlyProcessing:
+        example: false
+        type: boolean
+      isRunning:
+        example: true
+        type: boolean
+      lastProcessingTime:
+        example: "2024-01-15T10:30:00Z"
+        type: string
+      nextProcessingIn:
+        example: 1m30s
+        type: string
+      totalFailed:
+        example: 10
+        type: integer
+      totalProcessed:
+        example: 150
+        type: integer
+      totalSuccessful:
+        example: 140
+        type: integer
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@example.com
+    name: API Support
+    url: https://github.com/svbnbyrk/go-message-dispatcher/issues
+  description: Automatic message sending system with retry mechanism and background
+    processing
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  termsOfService: https://github.com/svbnbyrk/go-message-dispatcher
+  title: Message Dispatcher API
+  version: 1.0.0
+paths:
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Get the health status of the API server
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.HealthResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      summary: Health check
+      tags:
+      - health
+  /messages:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a list of messages with optional filtering and pagination
+      parameters:
+      - description: Filter by status
+        enum:
+        - pending
+        - sent
+        - failed
+        in: query
+        name: status
+        type: string
+      - default: 20
+        description: Number of messages to return (1-100)
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of messages to skip
+        in: query
+        minimum: 0
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          headers:
+            X-Total-Count:
+              description: Total number of messages
+              type: string
+          schema:
+            items:
+              $ref: '#/definitions/dto.MessageResponse'
+            type: array
+        "400":
+          description: Bad request - invalid parameters
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List messages with pagination
+      tags:
+      - messages
+    post:
+      consumes:
+      - application/json
+      description: Create a new message to be sent via webhook with automatic retry
+        mechanism
+      parameters:
+      - description: Message data
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/dto.CreateMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/dto.MessageResponse'
+        "400":
+          description: Bad request - invalid input
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized - missing or invalid API key
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create a new message
+      tags:
+      - messages
+  /messages/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve a specific message by its unique identifier
+      parameters:
+      - description: Message ID (UUID)
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.MessageResponse'
+        "400":
+          description: Bad request - invalid message ID
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "404":
+          description: Message not found
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get a message by ID
+      tags:
+      - messages
+  /messaging/process:
+    post:
+      consumes:
+      - application/json
+      description: Manually trigger message processing for testing purposes
+      parameters:
+      - default: 2
+        description: Number of messages to process (1-10)
+        in: query
+        maximum: 10
+        minimum: 1
+        name: batch_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ProcessingResultResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Process messages manually
+      tags:
+      - messaging
+  /messaging/status:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve the current message processing status and statistics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.ProcessingStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get processing status
+      tags:
+      - messaging
+  /scheduler/start:
+    post:
+      consumes:
+      - application/json
+      description: Start the background message processing scheduler
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Scheduler started successfully
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Scheduler already running
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Start scheduler
+      tags:
+      - scheduler
+  /scheduler/status:
+    get:
+      consumes:
+      - application/json
+      description: Retrieve the current status and statistics of the background message
+        scheduler
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.SchedulerStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get scheduler status
+      tags:
+      - scheduler
+  /scheduler/stop:
+    post:
+      consumes:
+      - application/json
+      description: Stop the background message processing scheduler
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Scheduler stopped successfully
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "409":
+          description: Scheduler not running
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "429":
+          description: Rate limit exceeded
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/dto.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Stop scheduler
+      tags:
+      - scheduler
+securityDefinitions:
+  BearerAuth:
+    description: Type "Bearer" followed by a space and JWT token.
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

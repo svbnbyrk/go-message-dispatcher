@@ -6,8 +6,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	_ "github.com/svbnbyrk/go-message-dispatcher/docs" // Import generated docs
 	"github.com/svbnbyrk/go-message-dispatcher/internal/adapters/primary/http/handlers"
 	httpMiddleware "github.com/svbnbyrk/go-message-dispatcher/internal/adapters/primary/http/middleware"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 // RouterConfig contains configuration for the router
@@ -56,6 +58,11 @@ func SetupRouter(
 
 	// Health endpoint (no auth required)
 	r.Get("/health", healthHandler.Health)
+
+	// Swagger documentation (development only)
+	r.Get("/swagger/*", httpSwagger.Handler(
+		httpSwagger.URL("http://localhost:8080/swagger/doc.json"),
+	))
 
 	// API routes with authentication
 	r.Route("/api/v1", func(r chi.Router) {

@@ -80,20 +80,38 @@ go-message-dispatcher/
 └── docs/                  # Documentation
 ```
 
-## API Endpoints (Planned)
+## API Documentation
 
-### Message Management
+### Swagger UI
+The API is fully documented with Swagger/OpenAPI 3.0. Once the server is running, you can access:
+
+- **Swagger UI**: http://localhost:8080/swagger/index.html
+- **OpenAPI JSON**: http://localhost:8080/swagger/doc.json
+
+### Quick API Reference
+
+#### Message Management
 - `POST /api/v1/messages` - Create new message
 - `GET /api/v1/messages` - List messages with pagination
 - `GET /api/v1/messages/{id}` - Get message details
 
-### Processing Control
-- `POST /api/v1/messaging/start` - Start automatic processing
-- `POST /api/v1/messaging/stop` - Stop automatic processing
-- `GET /api/v1/messaging/status` - Get processor status
+#### Message Processing
+- `POST /api/v1/messaging/process` - Manually trigger processing
+- `GET /api/v1/messaging/status` - Get processing status
 
-### System
+#### Scheduler Management
+- `POST /api/v1/scheduler/start` - Start background scheduler
+- `POST /api/v1/scheduler/stop` - Stop background scheduler
+- `GET /api/v1/scheduler/status` - Get scheduler status
+
+#### System
 - `GET /health` - Health check endpoint
+
+#### Authentication
+All API endpoints (except `/health`) require Bearer token authentication:
+```bash
+Authorization: Bearer your-api-key
+```
 
 ## Development Commands
 
@@ -107,6 +125,12 @@ make dev-down         # Stop development dependencies
 make migrate-up       # Run database migrations
 make migrate-down     # Rollback database migrations
 make migrate-create   # Create new migration file
+
+# Documentation
+make swagger          # Generate and serve swagger docs
+make swagger-gen      # Generate swagger documentation
+make swagger-serve    # Generate docs and start server
+make swagger-clean    # Clean generated swagger files
 
 # Testing
 make test             # Run all tests

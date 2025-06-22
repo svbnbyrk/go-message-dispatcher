@@ -44,34 +44,34 @@ services:
     container_name: msg-dispatcher-app
     environment:
       # Application
-      APP_ENV: development
-      PORT: 8080
-      API_KEY: dev-api-key-123
-      LOG_LEVEL: debug
+      APP_ENV: "development"
+      PORT: "8080"
+      API_KEY: "dev-api-key-123"
+      LOG_LEVEL: "debug"
       
       # Database
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: msg_dispatcher_user
-      DB_PASSWORD: msg_dispatcher_pass123
-      DB_NAME: message_dispatcher
-      DB_SSL_MODE: disable
+      DB_HOST: "postgres"
+      DB_PORT: "5432"
+      DB_USER: "msg_dispatcher_user"
+      DB_PASSWORD: "msg_dispatcher_pass123"
+      DB_NAME: "message_dispatcher"
+      DB_SSL_MODE: "disable"
       
       # Redis
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
       REDIS_PASSWORD: ""
-      REDIS_DB: 0
+      REDIS_DB: "0"
       
       # Webhook (replace with your webhook URL)
-      WEBHOOK_URL: https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae
-      WEBHOOK_TIMEOUT: 30s
-      WEBHOOK_MAX_RETRIES: 3
+      WEBHOOK_URL: "https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae"
+      WEBHOOK_TIMEOUT: "30s"
+      WEBHOOK_MAX_RETRIES: "3"
       
       # Scheduler
-      SCHEDULER_ENABLED: true
-      SCHEDULER_INTERVAL: 2m
-      SCHEDULER_BATCH_SIZE: 2
+      SCHEDULER_ENABLED: "true"
+      SCHEDULER_INTERVAL: "2m"
+      SCHEDULER_BATCH_SIZE: "2"
     ports:
       - "8080:8080"
     depends_on:

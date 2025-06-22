@@ -30,6 +30,19 @@ func NewMessageHandler(
 }
 
 // CreateMessage handles POST /api/v1/messages
+// @Summary      Create a new message
+// @Description  Create a new message to be sent via webhook with automatic retry mechanism
+// @Tags         messages
+// @Accept       json
+// @Produce      json
+// @Param        message  body      dto.CreateMessageRequest  true  "Message data"
+// @Success      201      {object}  dto.MessageResponse
+// @Failure      400      {object}  dto.ErrorResponse "Bad request - invalid input"
+// @Failure      401      {object}  dto.ErrorResponse "Unauthorized - missing or invalid API key"
+// @Failure      429      {object}  dto.ErrorResponse "Rate limit exceeded"
+// @Failure      500      {object}  dto.ErrorResponse "Internal server error"
+// @Security     BearerAuth
+// @Router       /messages [post]
 func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 	var req dto.CreateMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -64,6 +77,20 @@ func (h *MessageHandler) CreateMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetMessage handles GET /api/v1/messages/{id}
+// @Summary      Get a message by ID
+// @Description  Retrieve a specific message by its unique identifier
+// @Tags         messages
+// @Accept       json
+// @Produce      json
+// @Param        id   path      string  true  "Message ID (UUID)"
+// @Success      200  {object}  dto.MessageResponse
+// @Failure      400  {object}  dto.ErrorResponse "Bad request - invalid message ID"
+// @Failure      401  {object}  dto.ErrorResponse "Unauthorized"
+// @Failure      404  {object}  dto.ErrorResponse "Message not found"
+// @Failure      429  {object}  dto.ErrorResponse "Rate limit exceeded"
+// @Failure      500  {object}  dto.ErrorResponse "Internal server error"
+// @Security     BearerAuth
+// @Router       /messages/{id} [get]
 func (h *MessageHandler) GetMessage(w http.ResponseWriter, r *http.Request) {
 	idStr := chi.URLParam(r, "id")
 	id, err := uuid.Parse(idStr)
@@ -94,6 +121,22 @@ func (h *MessageHandler) GetMessage(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListMessages handles GET /api/v1/messages
+// @Summary      List messages with pagination
+// @Description  Retrieve a list of messages with optional filtering and pagination
+// @Tags         messages
+// @Accept       json
+// @Produce      json
+// @Param        status  query     string  false  "Filter by status"  Enums(pending, sent, failed)
+// @Param        limit   query     int     false  "Number of messages to return (1-100)"  minimum(1)  maximum(100)  default(20)
+// @Param        offset  query     int     false  "Number of messages to skip"  minimum(0)  default(0)
+// @Success      200     {array}   dto.MessageResponse
+// @Header       200     {string}  X-Total-Count  "Total number of messages"
+// @Failure      400     {object}  dto.ErrorResponse "Bad request - invalid parameters"
+// @Failure      401     {object}  dto.ErrorResponse "Unauthorized"
+// @Failure      429     {object}  dto.ErrorResponse "Rate limit exceeded"
+// @Failure      500     {object}  dto.ErrorResponse "Internal server error"
+// @Security     BearerAuth
+// @Router       /messages [get]
 func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	query := usecases.ListMessagesQuery{
 		Limit:  20, // Default limit
@@ -148,6 +191,17 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetProcessingStatus handles GET /api/v1/messaging/status
+// @Summary      Get processing status
+// @Description  Retrieve the current message processing status and statistics
+// @Tags         messaging
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  dto.ProcessingStatusResponse
+// @Failure      401  {object}  dto.ErrorResponse "Unauthorized"
+// @Failure      429  {object}  dto.ErrorResponse "Rate limit exceeded"
+// @Failure      500  {object}  dto.ErrorResponse "Internal server error"
+// @Security     BearerAuth
+// @Router       /messaging/status [get]
 func (h *MessageHandler) GetProcessingStatus(w http.ResponseWriter, r *http.Request) {
 	result, err := h.messageProcessing.GetProcessingStatus(r.Context())
 	if err != nil {
@@ -168,6 +222,18 @@ func (h *MessageHandler) GetProcessingStatus(w http.ResponseWriter, r *http.Requ
 }
 
 // ProcessMessages handles POST /api/v1/messaging/process - Manual processing trigger for testing
+// @Summary      Process messages manually
+// @Description  Manually trigger message processing for testing purposes
+// @Tags         messaging
+// @Accept       json
+// @Produce      json
+// @Param        batch_size  query     int  false  "Number of messages to process (1-10)"  minimum(1)  maximum(10)  default(2)
+// @Success      200         {object}  dto.ProcessingResultResponse
+// @Failure      401         {object}  dto.ErrorResponse "Unauthorized"
+// @Failure      429         {object}  dto.ErrorResponse "Rate limit exceeded"
+// @Failure      500         {object}  dto.ErrorResponse "Internal server error"
+// @Security     BearerAuth
+// @Router       /messaging/process [post]
 func (h *MessageHandler) ProcessMessages(w http.ResponseWriter, r *http.Request) {
 	// Get batch size from query param, default to 2
 	batchSize := 2

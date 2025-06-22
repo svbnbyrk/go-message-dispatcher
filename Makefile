@@ -19,6 +19,7 @@ GO_MOD := $(GO_CMD) mod
 .PHONY: dev dev-up dev-down migrate-up migrate-down migrate-create
 .PHONY: docker-build docker-run docker-push
 .PHONY: lint fmt vet security-scan deps-update
+.PHONY: swagger swagger-gen swagger-serve swagger-clean
 
 # Default target
 help: ## Show this help message
@@ -60,6 +61,24 @@ clean: ## Clean build artifacts
 	$(GO_CLEAN)
 	rm -rf bin/
 	@echo "✅ Clean completed"
+
+# Swagger Documentation
+swagger: swagger-gen ## Generate and serve swagger documentation
+	@echo "📚 Swagger documentation ready at http://localhost:8080/swagger/index.html"
+
+swagger-gen: ## Generate swagger documentation
+	@echo "📚 Generating swagger documentation..."
+	@which swag > /dev/null || (echo "Installing swag..." && go install github.com/swaggo/swag/cmd/swag@latest)
+	swag init -g cmd/server/main.go -o docs/
+	@echo "✅ Swagger documentation generated"
+
+swagger-serve: swagger-gen dev ## Generate docs and start server
+	@echo "📚 Swagger UI available at http://localhost:8080/swagger/index.html"
+
+swagger-clean: ## Clean generated swagger files
+	@echo "🧹 Cleaning swagger files..."
+	rm -rf docs/
+	@echo "✅ Swagger files cleaned"
 
 # Testing
 test: ## Run all tests
@@ -183,14 +202,15 @@ test-background: ## Run background processing test
 full-test: clean build test-unit test-integration ## Run complete test suite
 	@echo "✅ Full test suite completed"
 
-ci: deps-tidy fmt vet lint test ## Run CI pipeline
+ci: deps-tidy fmt vet lint test swagger-gen ## Run CI pipeline with docs
 	@echo "✅ CI pipeline completed"
 
-setup: deps-download dev-up migrate-up ## Initial project setup
+setup: deps-download dev-up migrate-up swagger-gen ## Initial project setup with docs
 	@echo "✅ Project setup completed"
 	@echo "🎉 Ready to start development!"
 	@echo ""
 	@echo "Next steps:"
 	@echo "  make dev          # Start development server"
 	@echo "  make test         # Run tests"
+	@echo "  make swagger      # View API documentation"
 	@echo "  make test-webhook # Test webhook integration" 
