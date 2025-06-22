@@ -83,15 +83,15 @@ curl -H "Authorization: Bearer your-secure-api-key-here" \
 
 ```
 go-message-dispatcher/
-├── cmd/                    # Application entry points
-├── internal/               # Private application code
+├── cmd/                   # Application entry points
+├── internal/              # Private application code
 │   ├── core/              # Domain and use cases (business logic)
 │   ├── adapters/          # Infrastructure adapters
 │   └── shared/            # Shared utilities
 ├── tests/                 # Test files
 ├── deployments/           # Docker and deployment configs
 ├── docs/                  # Documentation
-└── config.yaml           # Main configuration file
+└── config.yaml            # Main configuration file
 ```
 
 ## API Documentation
