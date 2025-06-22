@@ -20,6 +20,7 @@ func SetupRouter(
 	config RouterConfig,
 	messageHandler *handlers.MessageHandler,
 	healthHandler *handlers.HealthHandler,
+	schedulerHandler *handlers.SchedulerHandler,
 ) *chi.Mux {
 	r := chi.NewRouter()
 
@@ -66,6 +67,13 @@ func SetupRouter(
 		r.Route("/messaging", func(r chi.Router) {
 			r.Get("/status", messageHandler.GetProcessingStatus)
 			r.Post("/process", messageHandler.ProcessMessages)
+		})
+
+		// Scheduler management routes
+		r.Route("/scheduler", func(r chi.Router) {
+			r.Get("/status", schedulerHandler.GetSchedulerStatus)
+			r.Post("/start", schedulerHandler.StartScheduler)
+			r.Post("/stop", schedulerHandler.StopScheduler)
 		})
 	})
 

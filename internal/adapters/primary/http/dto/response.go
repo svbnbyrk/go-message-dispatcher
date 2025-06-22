@@ -33,6 +33,19 @@ type ProcessingResultResponse struct {
 	Errors         []string `json:"errors,omitempty"`
 }
 
+// SchedulerStatusResponse represents the background scheduler status
+type SchedulerStatusResponse struct {
+	IsRunning             bool      `json:"isRunning"`
+	IsCurrentlyProcessing bool      `json:"isCurrentlyProcessing"`
+	TotalProcessed        int64     `json:"totalProcessed"`
+	TotalSuccessful       int64     `json:"totalSuccessful"`
+	TotalFailed           int64     `json:"totalFailed"`
+	LastProcessingTime    time.Time `json:"lastProcessingTime"`
+	NextProcessingIn      string    `json:"nextProcessingIn"`
+	Interval              string    `json:"interval"`
+	BatchSize             int       `json:"batchSize"`
+}
+
 // ErrorResponse represents an error response
 type ErrorResponse struct {
 	Error   string `json:"error"`
