@@ -27,6 +27,14 @@ func SetupRouter(
 	// Basic middleware
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
+
+	// Global rate limiting (60 requests per minute per IP)
+	r.Use(httpMiddleware.RateLimitMiddleware(httpMiddleware.RateLimitConfig{
+		Enabled:           true,
+		RequestsPerMinute: 60,
+		CleanupInterval:   5 * time.Minute,
+	}))
+
 	r.Use(httpMiddleware.RequestLogging()) // Structured logging with correlation IDs
 	r.Use(httpMiddleware.PanicRecovery())  // Panic recovery with structured logging
 	r.Use(middleware.Timeout(60 * time.Second))
