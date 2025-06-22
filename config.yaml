@@ -20,7 +20,7 @@ logging:
   enable_json: false  # true for production
 
 database:
-  host: "localhost"  # Local PostgreSQL
+  host: "postgres"  # Local PostgreSQL
   port: 5432
   username: "msg_dispatcher_user"
   password: "msg_dispatcher_pass123"
@@ -33,7 +33,7 @@ database:
   health_check_period: "1m"
 
 redis:
-  host: "localhost"  # Local Redis
+  host: "redis"  # Local Redis
   port: 6379
   password: ""
   db: 0
