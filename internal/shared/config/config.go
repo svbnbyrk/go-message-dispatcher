@@ -65,6 +65,7 @@ type WebhookConfig struct {
 	Timeout          time.Duration `mapstructure:"timeout"`
 	MaxRetries       int           `mapstructure:"max_retries"`
 	RetryBackoffBase time.Duration `mapstructure:"retry_backoff_base"`
+	RetryBackoffMax  time.Duration `mapstructure:"retry_backoff_max"`
 }
 
 // SchedulerConfig contains background processing configuration
@@ -155,7 +156,8 @@ func setDefaults() {
 	viper.SetDefault("webhook.auth_token", "")
 	viper.SetDefault("webhook.timeout", "30s")
 	viper.SetDefault("webhook.max_retries", 3)
-	viper.SetDefault("webhook.retry_backoff_base", "100ms")
+	viper.SetDefault("webhook.retry_backoff_base", "1s")
+	viper.SetDefault("webhook.retry_backoff_max", "5s")
 
 	// Scheduler defaults
 	viper.SetDefault("scheduler.enabled", true)
@@ -204,6 +206,7 @@ func setupEnvBindings() {
 	viper.BindEnv("webhook.timeout", "WEBHOOK_TIMEOUT")
 	viper.BindEnv("webhook.max_retries", "WEBHOOK_MAX_RETRIES")
 	viper.BindEnv("webhook.retry_backoff_base", "WEBHOOK_RETRY_BACKOFF_BASE")
+	viper.BindEnv("webhook.retry_backoff_max", "WEBHOOK_RETRY_BACKOFF_MAX")
 
 	// Scheduler env bindings
 	viper.BindEnv("scheduler.enabled", "SCHEDULER_ENABLED")

@@ -38,7 +38,8 @@ webhook:
   auth_token: ""
   timeout: "30s"
   max_retries: 3
-  retry_backoff_base: "100ms"
+  retry_backoff_base: "1s"
+  retry_backoff_max: "5s"
 
 scheduler:
   enabled: true

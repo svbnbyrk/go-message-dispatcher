@@ -33,4 +33,5 @@ type WebhookConfig struct {
 	Timeout          time.Duration `yaml:"timeout" env:"WEBHOOK_TIMEOUT"`
 	MaxRetries       int           `yaml:"max_retries" env:"WEBHOOK_MAX_RETRIES"`
 	RetryBackoffBase time.Duration `yaml:"retry_backoff_base" env:"WEBHOOK_RETRY_BACKOFF_BASE"`
+	RetryBackoffMax  time.Duration `yaml:"retry_backoff_max" env:"WEBHOOK_RETRY_BACKOFF_MAX"`
 }
