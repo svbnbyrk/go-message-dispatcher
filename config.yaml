@@ -1,12 +1,12 @@
-# Message Dispatcher Configuration
+# Message Dispatcher Configuration - Local Development
 
 app:
   name: "Message Dispatcher"
   version: "1.0.0"
   environment: "development"  # development, staging, production
   port: 8080
-  api_key: "dev-api-key-123"
-  log_level: "info"  # debug, info, warn, error
+  api_key: "local-dev-api-key-123"  # Different API key for local development
+  log_level: "debug"  # More verbose logging for development
 
 # Rate limiting configuration
 rate_limiting:
@@ -15,12 +15,12 @@ rate_limiting:
   cleanup_interval: "5m"            # Memory cleanup interval
 
 logging:
-  level: "info"
+  level: "debug"
   environment: "development"
   enable_json: false  # true for production
 
 database:
-  host: "localhost"
+  host: "localhost"  # Local PostgreSQL
   port: 5432
   username: "msg_dispatcher_user"
   password: "msg_dispatcher_pass123"
@@ -33,14 +33,14 @@ database:
   health_check_period: "1m"
 
 redis:
-  host: "localhost"
+  host: "localhost"  # Local Redis
   port: 6379
   password: ""
   db: 0
   ttl: "5m"
 
 webhook:
-  url: "https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae"
+  url: "https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae"  # Change this to your webhook URL!
   auth_token: ""
   timeout: "30s"
   max_retries: 3

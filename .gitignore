@@ -7,7 +7,7 @@
 *.dll
 *.so
 *.dylib
-
+*.cursor
 # Test binary, built with `go test -c`
 *.test
 
@@ -26,6 +26,9 @@ go.work.sum
 
 # env file
 .env
+
+# Local configuration (contains sensitive data)
+config.local.yaml
 
 # Editor/IDE
 # .idea/

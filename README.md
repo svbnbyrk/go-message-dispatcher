@@ -46,10 +46,31 @@ That's it! The application will be running at `http://localhost:8080`
 
 ### Configuration
 
-Before running, update the `config.yaml` file with your settings:
+The application uses **config.yaml** for all configuration. Two configuration approaches:
 
+**🐳 Docker Development (Recommended):**
+```bash
+# 1. Update config.yaml with your settings
+# 2. Run with Docker Compose
+docker-compose up --build
+```
+
+**💻 Local Development:**
+```bash
+# 1. Copy config to local version
+cp config.yaml config.local.yaml
+
+# 2. Update config.local.yaml for local development:
+#    - database.host: "localhost" 
+#    - redis.host: "localhost"
+#    - api_key: "your-local-api-key"
+
+# 3. Run development server
+make dev  # Automatically uses config.local.yaml
+```
+
+**Key configurations to update in config.yaml:**
 ```yaml
-# Key configurations to update:
 app:
   api_key: "your-secure-api-key-here"  # Change this!
 
@@ -57,13 +78,13 @@ webhook:
   url: "https://your-webhook-endpoint.com"  # Your webhook URL
   auth_token: "your-webhook-auth-token"     # Optional webhook auth
 
+# For Docker: use service names
 database:
-  # Database settings (defaults work for development)
-  password: "msg_dispatcher_pass123"
+  host: "postgres"  # Docker service name
 
-redis:
-  # Redis settings (defaults work for development)
-  password: ""
+# For Local: use localhost  
+database:
+  host: "localhost"  # Local PostgreSQL
 ```
 
 ### API Access

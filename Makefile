@@ -28,8 +28,14 @@ help: ## Show this help message
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z_-]+:.*##/ {printf "  \033[36m%-20s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
 # Development
-dev: ## Start development server
-	@echo "🚀 Starting development server..."
+dev: ## Start development server (uses config.local.yaml)
+	@echo "🚀 Starting development server with local config..."
+	@if [ -f config.local.yaml ]; then \
+		cp config.local.yaml config.yaml; \
+		echo "📝 Using config.local.yaml for development"; \
+	else \
+		echo "⚠️  config.local.yaml not found, using default config.yaml"; \
+	fi
 	$(GO_CMD) run cmd/server/main.go
 
 dev-up: ## Start development dependencies (Docker)

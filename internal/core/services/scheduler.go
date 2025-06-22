@@ -106,7 +106,16 @@ func (s *ProcessingScheduler) IsRunning() bool {
 func (s *ProcessingScheduler) GetStats() ProcessingStats {
 	s.stats.mu.RLock()
 	defer s.stats.mu.RUnlock()
-	return *s.stats
+
+	// Return a copy without the mutex to avoid copying lock value
+	return ProcessingStats{
+		TotalProcessed:        s.stats.TotalProcessed,
+		TotalSuccessful:       s.stats.TotalSuccessful,
+		TotalFailed:           s.stats.TotalFailed,
+		LastProcessingTime:    s.stats.LastProcessingTime,
+		LastProcessingResult:  s.stats.LastProcessingResult,
+		IsCurrentlyProcessing: s.stats.IsCurrentlyProcessing,
+	}
 }
 
 // run is the main processing loop
