@@ -2,23 +2,31 @@ package usecases
 
 import (
 	"context"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/errors"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/message"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/repositories"
+	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/usecases"
 )
 
 // messageManagementService implements MessageManagementUseCase
 type messageManagementService struct {
-	messageRepo repositories.MessageRepository
+	messageRepo  repositories.MessageRepository
+	cacheService services.CacheService
 }
 
 // NewMessageManagementService creates a new message management use case
-func NewMessageManagementService(messageRepo repositories.MessageRepository) usecases.MessageManagementUseCase {
+func NewMessageManagementService(
+	messageRepo repositories.MessageRepository,
+	cacheService services.CacheService,
+) usecases.MessageManagementUseCase {
 	return &messageManagementService{
-		messageRepo: messageRepo,
+		messageRepo:  messageRepo,
+		cacheService: cacheService,
 	}
 }
 
@@ -84,6 +92,23 @@ func (s *messageManagementService) ListMessages(ctx context.Context, query useca
 		return nil, errors.NewValidationError("offset cannot be negative")
 	}
 
+	// For sent messages with small limit (≤10), try cache first for better performance
+	if query.Status != nil && *query.Status == message.StatusSent && limit <= 10 && offset == 0 {
+		if cachedMessages, err := s.getRecentSentMessagesFromCache(ctx, limit); err == nil && len(cachedMessages) > 0 {
+			// Get total count from database
+			totalCount, err := s.messageRepo.CountByStatus(ctx, message.StatusSent)
+			if err != nil {
+				return nil, err
+			}
+
+			return &usecases.ListMessagesResponse{
+				Messages:   cachedMessages,
+				TotalCount: totalCount,
+				HasMore:    int64(len(cachedMessages)) < totalCount,
+			}, nil
+		}
+	}
+
 	var messages []*message.Message
 	var err error
 
@@ -128,6 +153,64 @@ func (s *messageManagementService) ListMessages(ctx context.Context, query useca
 		TotalCount: totalCount,
 		HasMore:    hasMore,
 	}, nil
+}
+
+// getRecentSentMessagesFromCache retrieves recent sent messages from Redis sorted set
+func (s *messageManagementService) getRecentSentMessagesFromCache(ctx context.Context, limit int) ([]usecases.MessageResponse, error) {
+	// Get recent message IDs from sorted set (latest first)
+	members, err := s.cacheService.ZRevRange(ctx, "sent_messages", 0, int64(limit-1))
+	if err != nil {
+		return nil, err
+	}
+
+	if len(members) == 0 {
+		return []usecases.MessageResponse{}, nil
+	}
+
+	responses := make([]usecases.MessageResponse, 0, len(members))
+
+	// Parse each member and get detailed data
+	for _, member := range members {
+		// Member format: "messageId:externalId:phoneNumber"
+		parts := strings.Split(member, ":")
+		if len(parts) != 3 {
+			continue // Skip malformed entries
+		}
+
+		messageID := parts[0]
+		externalID := parts[1]
+		phoneNumber := parts[2]
+
+		// Get detailed message data from cache
+		var cacheData services.SentMessageCacheData
+		cacheKey := "message_detail:" + messageID
+		if err := s.cacheService.GetJSON(ctx, cacheKey, &cacheData); err != nil {
+			// If detail not found in cache, skip this message
+			continue
+		}
+
+		// Convert to response
+		id, err := uuid.Parse(messageID)
+		if err != nil {
+			continue // Skip invalid UUIDs
+		}
+
+		response := usecases.MessageResponse{
+			ID:          id,
+			PhoneNumber: phoneNumber,
+			Content:     cacheData.Content,
+			Status:      string(message.StatusSent),
+			ExternalID:  &externalID,
+			RetryCount:  0,                                  // Sent messages have 0 retry count
+			CreatedAt:   cacheData.SentAt.Add(-time.Minute), // Approximate created time
+			UpdatedAt:   cacheData.SentAt,
+			SentAt:      &cacheData.SentAt,
+		}
+
+		responses = append(responses, response)
+	}
+
+	return responses, nil
 }
 
 // messageToResponse converts a domain message to response DTO

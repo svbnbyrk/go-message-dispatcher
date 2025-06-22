@@ -27,6 +27,22 @@ type CacheService interface {
 
 	// IsHealthy checks if the cache service is healthy
 	IsHealthy(ctx context.Context) error
+
+	// Sorted Set Operations for efficient message listing
+	// ZAdd adds a member with score to sorted set
+	ZAdd(ctx context.Context, key string, score float64, member string, ttl time.Duration) error
+
+	// ZRevRange gets members from sorted set in descending order (latest first)
+	ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error)
+
+	// ZRem removes members from sorted set
+	ZRem(ctx context.Context, key string, members ...string) error
+
+	// ZCard gets the number of elements in sorted set
+	ZCard(ctx context.Context, key string) (int64, error)
+
+	// ZRemRangeByRank removes elements by rank (keep only top N)
+	ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error
 }
 
 // CacheConfig contains configuration for cache service
@@ -36,4 +52,13 @@ type CacheConfig struct {
 	Password string        `yaml:"password" env:"REDIS_PASSWORD"`
 	DB       int           `yaml:"db" env:"REDIS_DB"`
 	TTL      time.Duration `yaml:"ttl" env:"REDIS_TTL"`
+}
+
+// SentMessageCacheData represents cached sent message data
+type SentMessageCacheData struct {
+	MessageID   string    `json:"message_id"`
+	ExternalID  string    `json:"external_id"`
+	PhoneNumber string    `json:"phone_number"`
+	Content     string    `json:"content"`
+	SentAt      time.Time `json:"sent_at"`
 }

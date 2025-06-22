@@ -2,6 +2,7 @@ package usecases
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/errors"
@@ -99,19 +100,39 @@ func (s *messageProcessingService) processMessage(ctx context.Context, msg *mess
 		return err
 	}
 
-	// Cache the sent message information
-	cacheData := map[string]interface{}{
-		"message_id": msg.ID.String(),
-		"messageId":  webhookResp.MessageID,
-		"sent_at":    msg.SentAt,
-		"status":     string(msg.Status),
+	// Cache the sent message using sorted set for efficient listing
+	// Use timestamp as score for chronological ordering (latest first)
+	timestamp := float64(msg.SentAt.Unix())
+
+	// Create member data: messageId:externalId:phoneNumber for easy parsing
+	member := fmt.Sprintf("%s:%s:%s", msg.ID.String(), webhookResp.MessageID, msg.PhoneNumber.String())
+
+	// Add to sorted set with 30 days TTL
+	if err := s.cacheService.ZAdd(ctx, "sent_messages", timestamp, member, 30*24*time.Hour); err != nil {
+		// Cache failure shouldn't break the flow, just log it
+		_ = err // Ignore cache errors for now
 	}
 
-	cacheKey := "message:" + msg.ID.String()
+	// Also cache detailed message data for quick retrieval
+	cacheData := services.SentMessageCacheData{
+		MessageID:   msg.ID.String(),
+		ExternalID:  webhookResp.MessageID,
+		PhoneNumber: msg.PhoneNumber.String(),
+		Content:     msg.Content.String(),
+		SentAt:      *msg.SentAt,
+	}
+
+	cacheKey := "message_detail:" + msg.ID.String()
 	if err := s.cacheService.SetJSON(ctx, cacheKey, cacheData, 30*24*time.Hour); err != nil {
 		// Cache failure shouldn't break the flow, just log it
-		// In a real application, you might want to use a logger here
 		_ = err // Ignore cache errors for now
+	}
+
+	// Keep only the latest 10 messages in the sorted set to save memory
+	// Remove messages beyond rank 10 (0-based indexing, so remove from rank 10 onwards)
+	if err := s.cacheService.ZRemRangeByRank(ctx, "sent_messages", 10, -1); err != nil {
+		// Cache cleanup failure shouldn't break the flow
+		_ = err // Ignore cache cleanup errors
 	}
 
 	return nil

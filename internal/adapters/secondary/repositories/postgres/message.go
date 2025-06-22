@@ -90,24 +90,22 @@ func (r *MessageRepository) GetPendingMessages(ctx context.Context, limit int) (
 		return nil, errors.NewValidationError("limit must be greater than zero")
 	}
 
-	query, args, err := r.qb.
-		Select(
-			"id", "phone_number", "content", "status",
-			"external_id", "retry_count", "created_at", "updated_at", "sent_at",
-		).
-		From("messages").
-		Where(squirrel.Eq{"status": message.StatusPending.String()}).
-		OrderBy("created_at ASC").
-		Limit(uint64(limit)).
-		ToSql()
+	// Use raw SQL for FOR UPDATE SKIP LOCKED to prevent race conditions in distributed environment
+	// This ensures each instance gets different messages atomically
+	// Include external_id and sent_at as NULL for pending messages to match scanMessages expectations
+	query := `
+		SELECT id, phone_number, content, status, 
+		       NULL as external_id, retry_count, 
+		       created_at, updated_at, NULL as sent_at
+		FROM messages 
+		WHERE status = $1 
+		ORDER BY created_at ASC 
+		LIMIT $2
+		FOR UPDATE SKIP LOCKED`
 
+	rows, err := r.pool.Query(ctx, query, message.StatusPending.String(), limit)
 	if err != nil {
-		return nil, errors.NewRepositoryError("failed to build pending messages query: %v", err)
-	}
-
-	rows, err := r.pool.Query(ctx, query, args...)
-	if err != nil {
-		return nil, err
+		return nil, errors.NewRepositoryError("failed to query pending messages: %v", err)
 	}
 	defer rows.Close()
 

@@ -10,7 +10,8 @@ An automatic message sending system built with Go that processes messages from a
 - 🏗️ **Clean Architecture**: Hexagonal architecture with clear separation of concerns
 - 📊 **Caching**: Redis integration for performance optimization
 - 🔍 **Observability**: Comprehensive logging and monitoring
-- 🚀 **Production Ready**: Docker support with health checks
+- ⚡ **Distributed Safe**: Race condition prevention with PostgreSQL row locking
+- 🚀 **Production Ready**: Docker support with health checks and scalability
 
 ## Architecture
 
@@ -137,6 +138,8 @@ make test             # Run all tests
 make test-unit        # Run unit tests only
 make test-integration # Run integration tests
 make test-coverage    # Run tests with coverage
+make test-race-condition  # Test race condition prevention
+make test-deployment      # Test deployment scenario
 
 # Code Quality
 make lint             # Run linter
@@ -146,6 +149,36 @@ make vet              # Run go vet
 # Build
 make build            # Build application
 make docker-build     # Build Docker image
+```
+
+## Distributed Deployment
+
+### Race Condition Prevention
+This system is designed to run safely with multiple instances:
+
+- ✅ **PostgreSQL Row Locking**: Uses `FOR UPDATE SKIP LOCKED` to prevent duplicate message processing
+- ✅ **Atomic Operations**: Each instance locks different message batches atomically  
+- ✅ **No Shared State**: Stateless design allows horizontal scaling
+- ✅ **Graceful Degradation**: If one instance fails, others continue processing
+
+### Scaling Guidelines
+```bash
+# Multiple instances can run simultaneously
+docker-compose up --scale app=3
+
+# Each instance will:
+# 1. Process different message batches
+# 2. Never duplicate webhook calls  
+# 3. Handle backlog efficiently
+```
+
+### Testing Distributed Behavior
+```bash
+# Test race condition prevention
+make test-race-condition
+
+# Test deployment scenario with existing pending messages
+make test-deployment
 ```
 
 ## Configuration

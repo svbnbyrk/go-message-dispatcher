@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -157,7 +158,7 @@ func (h *MessageHandler) ListMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if statusStr := r.URL.Query().Get("status"); statusStr != "" {
-		status := message.Status(statusStr)
+		status := message.Status(strings.ToUpper(statusStr))
 		if status.IsValid() {
 			query.Status = &status
 		}

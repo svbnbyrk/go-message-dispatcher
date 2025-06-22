@@ -119,3 +119,81 @@ func (r *redisCacheService) IsHealthy(ctx context.Context) error {
 
 	return nil
 }
+
+// ZAdd adds a member with score to sorted set
+func (r *redisCacheService) ZAdd(ctx context.Context, key string, score float64, member string, ttl time.Duration) error {
+	// Add member to sorted set
+	err := r.client.ZAdd(ctx, key, redis.Z{
+		Score:  score,
+		Member: member,
+	}).Err()
+	if err != nil {
+		return domainErrors.NewBusinessError("failed to add member to sorted set %s: %v", key, err)
+	}
+
+	// Set TTL if provided
+	if ttl > 0 {
+		err = r.client.Expire(ctx, key, ttl).Err()
+		if err != nil {
+			return domainErrors.NewBusinessError("failed to set TTL for sorted set %s: %v", key, err)
+		}
+	}
+
+	return nil
+}
+
+// ZRevRange gets members from sorted set in descending order (latest first)
+func (r *redisCacheService) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	result := r.client.ZRevRange(ctx, key, start, stop)
+	if err := result.Err(); err != nil {
+		if err == redis.Nil {
+			return []string{}, nil // Return empty slice if key doesn't exist
+		}
+		return nil, domainErrors.NewBusinessError("failed to get sorted set range %s: %v", key, err)
+	}
+
+	return result.Val(), nil
+}
+
+// ZRem removes members from sorted set
+func (r *redisCacheService) ZRem(ctx context.Context, key string, members ...string) error {
+	if len(members) == 0 {
+		return nil
+	}
+
+	// Convert strings to interfaces for Redis client
+	memberInterfaces := make([]interface{}, len(members))
+	for i, member := range members {
+		memberInterfaces[i] = member
+	}
+
+	err := r.client.ZRem(ctx, key, memberInterfaces...).Err()
+	if err != nil {
+		return domainErrors.NewBusinessError("failed to remove members from sorted set %s: %v", key, err)
+	}
+
+	return nil
+}
+
+// ZCard gets the number of elements in sorted set
+func (r *redisCacheService) ZCard(ctx context.Context, key string) (int64, error) {
+	result := r.client.ZCard(ctx, key)
+	if err := result.Err(); err != nil {
+		if err == redis.Nil {
+			return 0, nil
+		}
+		return 0, domainErrors.NewBusinessError("failed to get sorted set cardinality %s: %v", key, err)
+	}
+
+	return result.Val(), nil
+}
+
+// ZRemRangeByRank removes elements by rank (keep only top N)
+func (r *redisCacheService) ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error {
+	err := r.client.ZRemRangeByRank(ctx, key, start, stop).Err()
+	if err != nil {
+		return domainErrors.NewBusinessError("failed to remove range by rank from sorted set %s: %v", key, err)
+	}
+
+	return nil
+}

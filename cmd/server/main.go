@@ -131,7 +131,7 @@ func main() {
 
 	// Initialize use cases
 	logger.Info("Initializing use cases")
-	messageMgmtUseCase := usecases.NewMessageManagementService(messageRepo)
+	messageMgmtUseCase := usecases.NewMessageManagementService(messageRepo, cacheService)
 	messageProcessingUseCase := usecases.NewMessageProcessingService(
 		messageRepo,
 		webhookService,
