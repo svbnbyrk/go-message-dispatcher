@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/domain/message"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/repositories"
+	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/services"
 	"github.com/svbnbyrk/go-message-dispatcher/internal/core/ports/usecases"
 	usecaseImpl "github.com/svbnbyrk/go-message-dispatcher/internal/core/usecases"
 )
@@ -120,6 +122,136 @@ func (m *mockMessageRepository) DeleteByID(ctx context.Context, id message.Messa
 	return nil
 }
 
+// Mock cache service for testing
+type mockCacheServiceForManagement struct {
+	data       map[string]interface{}
+	sortedSets map[string]map[string]float64 // key -> member -> score
+	shouldFail bool
+}
+
+func newMockCacheServiceForManagement() *mockCacheServiceForManagement {
+	return &mockCacheServiceForManagement{
+		data:       make(map[string]interface{}),
+		sortedSets: make(map[string]map[string]float64),
+	}
+}
+
+func (m *mockCacheServiceForManagement) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if m.shouldFail {
+		return errors.New("cache set failed")
+	}
+	m.data[key] = value
+	return nil
+}
+
+func (m *mockCacheServiceForManagement) Get(ctx context.Context, key string) (interface{}, error) {
+	if m.shouldFail {
+		return nil, errors.New("cache get failed")
+	}
+	if value, exists := m.data[key]; exists {
+		return value, nil
+	}
+	return nil, errors.New("key not found")
+}
+
+func (m *mockCacheServiceForManagement) Delete(ctx context.Context, key string) error {
+	if m.shouldFail {
+		return errors.New("cache delete failed")
+	}
+	delete(m.data, key)
+	return nil
+}
+
+func (m *mockCacheServiceForManagement) Exists(ctx context.Context, key string) (bool, error) {
+	if m.shouldFail {
+		return false, errors.New("cache exists failed")
+	}
+	_, exists := m.data[key]
+	return exists, nil
+}
+
+func (m *mockCacheServiceForManagement) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+	if m.shouldFail {
+		return errors.New("cache setJSON failed")
+	}
+	m.data[key] = value
+	return nil
+}
+
+func (m *mockCacheServiceForManagement) GetJSON(ctx context.Context, key string, dest interface{}) error {
+	if m.shouldFail {
+		return errors.New("cache getJSON failed")
+	}
+	if value, exists := m.data[key]; exists {
+		if cacheData, ok := dest.(*services.SentMessageCacheData); ok && value != nil {
+			// Simple mock - return a dummy value
+			cacheData.MessageID = "test-id"
+			cacheData.ExternalID = "external-123"
+			cacheData.PhoneNumber = "+905551234567"
+			cacheData.Content = "Test message"
+			cacheData.SentAt = time.Now()
+		}
+		return nil
+	}
+	return errors.New("key not found")
+}
+
+func (m *mockCacheServiceForManagement) IsHealthy(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockCacheServiceForManagement) ZAdd(ctx context.Context, key string, score float64, member string, ttl time.Duration) error {
+	if m.shouldFail {
+		return errors.New("cache zadd failed")
+	}
+	if m.sortedSets[key] == nil {
+		m.sortedSets[key] = make(map[string]float64)
+	}
+	m.sortedSets[key][member] = score
+	return nil
+}
+
+func (m *mockCacheServiceForManagement) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	if m.shouldFail {
+		return nil, errors.New("cache zrevrange failed")
+	}
+	// Simple mock implementation - return empty slice
+	return []string{}, nil
+}
+
+func (m *mockCacheServiceForManagement) ZRem(ctx context.Context, key string, members ...string) error {
+	if m.shouldFail {
+		return errors.New("cache zrem failed")
+	}
+	if m.sortedSets[key] != nil {
+		for _, member := range members {
+			delete(m.sortedSets[key], member)
+		}
+	}
+	return nil
+}
+
+func (m *mockCacheServiceForManagement) ZCard(ctx context.Context, key string) (int64, error) {
+	if m.shouldFail {
+		return 0, errors.New("cache zcard failed")
+	}
+	if m.sortedSets[key] != nil {
+		return int64(len(m.sortedSets[key])), nil
+	}
+	return 0, nil
+}
+
+func (m *mockCacheServiceForManagement) ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error {
+	if m.shouldFail {
+		return errors.New("cache zremrangebyrank failed")
+	}
+	// Simple mock - just clear the set
+	if m.sortedSets[key] != nil {
+		m.sortedSets[key] = make(map[string]float64)
+	}
+	return nil
+}
+
 // Test helper to create a test message
 func createTestMessage(t *testing.T) *message.Message {
 	t.Helper()
@@ -208,7 +340,7 @@ func TestMessageManagementService_CreateMessage(t *testing.T) {
 				mockRepo.shouldFailOp = "Create"
 			}
 
-			service := usecaseImpl.NewMessageManagementService(mockRepo)
+			service := usecaseImpl.NewMessageManagementService(mockRepo, newMockCacheServiceForManagement())
 			ctx := context.Background()
 
 			result, err := service.CreateMessage(ctx, tt.command)
@@ -246,7 +378,7 @@ func TestMessageManagementService_CreateMessage(t *testing.T) {
 
 func TestMessageManagementService_GetMessageByID(t *testing.T) {
 	mockRepo := newMockMessageRepository()
-	service := usecaseImpl.NewMessageManagementService(mockRepo)
+	service := usecaseImpl.NewMessageManagementService(mockRepo, newMockCacheServiceForManagement())
 	ctx := context.Background()
 
 	// Create a test message
@@ -297,7 +429,7 @@ func TestMessageManagementService_GetMessageByID(t *testing.T) {
 
 func TestMessageManagementService_ListMessages(t *testing.T) {
 	mockRepo := newMockMessageRepository()
-	service := usecaseImpl.NewMessageManagementService(mockRepo)
+	service := usecaseImpl.NewMessageManagementService(mockRepo, newMockCacheServiceForManagement())
 	ctx := context.Background()
 
 	// Create test messages

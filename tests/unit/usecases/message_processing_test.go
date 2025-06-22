@@ -38,18 +38,20 @@ func (m *mockWebhookService) IsHealthy(ctx context.Context) error {
 }
 
 // Mock cache service for testing
-type mockCacheService struct {
+type mockCacheServiceForProcessing struct {
 	data       map[string]interface{}
+	sortedSets map[string]map[string]float64 // key -> member -> score
 	shouldFail bool
 }
 
-func newMockCacheService() *mockCacheService {
-	return &mockCacheService{
-		data: make(map[string]interface{}),
+func newMockCacheServiceForProcessing() *mockCacheServiceForProcessing {
+	return &mockCacheServiceForProcessing{
+		data:       make(map[string]interface{}),
+		sortedSets: make(map[string]map[string]float64),
 	}
 }
 
-func (m *mockCacheService) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (m *mockCacheServiceForProcessing) Set(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	if m.shouldFail {
 		return &testError{message: "cache set failed"}
 	}
@@ -57,7 +59,7 @@ func (m *mockCacheService) Set(ctx context.Context, key string, value interface{
 	return nil
 }
 
-func (m *mockCacheService) Get(ctx context.Context, key string) (interface{}, error) {
+func (m *mockCacheServiceForProcessing) Get(ctx context.Context, key string) (interface{}, error) {
 	if m.shouldFail {
 		return nil, &testError{message: "cache get failed"}
 	}
@@ -67,7 +69,7 @@ func (m *mockCacheService) Get(ctx context.Context, key string) (interface{}, er
 	return nil, &testError{message: "key not found"}
 }
 
-func (m *mockCacheService) Delete(ctx context.Context, key string) error {
+func (m *mockCacheServiceForProcessing) Delete(ctx context.Context, key string) error {
 	if m.shouldFail {
 		return &testError{message: "cache delete failed"}
 	}
@@ -75,7 +77,7 @@ func (m *mockCacheService) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (m *mockCacheService) Exists(ctx context.Context, key string) (bool, error) {
+func (m *mockCacheServiceForProcessing) Exists(ctx context.Context, key string) (bool, error) {
 	if m.shouldFail {
 		return false, &testError{message: "cache exists failed"}
 	}
@@ -83,7 +85,7 @@ func (m *mockCacheService) Exists(ctx context.Context, key string) (bool, error)
 	return exists, nil
 }
 
-func (m *mockCacheService) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
+func (m *mockCacheServiceForProcessing) SetJSON(ctx context.Context, key string, value interface{}, ttl time.Duration) error {
 	if m.shouldFail {
 		return &testError{message: "cache setJSON failed"}
 	}
@@ -91,7 +93,7 @@ func (m *mockCacheService) SetJSON(ctx context.Context, key string, value interf
 	return nil
 }
 
-func (m *mockCacheService) GetJSON(ctx context.Context, key string, dest interface{}) error {
+func (m *mockCacheServiceForProcessing) GetJSON(ctx context.Context, key string, dest interface{}) error {
 	if m.shouldFail {
 		return &testError{message: "cache getJSON failed"}
 	}
@@ -99,7 +101,59 @@ func (m *mockCacheService) GetJSON(ctx context.Context, key string, dest interfa
 	return nil
 }
 
-func (m *mockCacheService) IsHealthy(ctx context.Context) error {
+func (m *mockCacheServiceForProcessing) IsHealthy(ctx context.Context) error {
+	return nil
+}
+
+func (m *mockCacheServiceForProcessing) ZAdd(ctx context.Context, key string, score float64, member string, ttl time.Duration) error {
+	if m.shouldFail {
+		return &testError{message: "cache zadd failed"}
+	}
+	if m.sortedSets[key] == nil {
+		m.sortedSets[key] = make(map[string]float64)
+	}
+	m.sortedSets[key][member] = score
+	return nil
+}
+
+func (m *mockCacheServiceForProcessing) ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	if m.shouldFail {
+		return nil, &testError{message: "cache zrevrange failed"}
+	}
+	// Simple mock implementation - return empty slice
+	return []string{}, nil
+}
+
+func (m *mockCacheServiceForProcessing) ZRem(ctx context.Context, key string, members ...string) error {
+	if m.shouldFail {
+		return &testError{message: "cache zrem failed"}
+	}
+	if m.sortedSets[key] != nil {
+		for _, member := range members {
+			delete(m.sortedSets[key], member)
+		}
+	}
+	return nil
+}
+
+func (m *mockCacheServiceForProcessing) ZCard(ctx context.Context, key string) (int64, error) {
+	if m.shouldFail {
+		return 0, &testError{message: "cache zcard failed"}
+	}
+	if m.sortedSets[key] != nil {
+		return int64(len(m.sortedSets[key])), nil
+	}
+	return 0, nil
+}
+
+func (m *mockCacheServiceForProcessing) ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error {
+	if m.shouldFail {
+		return &testError{message: "cache zremrangebyrank failed"}
+	}
+	// Simple mock - just clear the set
+	if m.sortedSets[key] != nil {
+		m.sortedSets[key] = make(map[string]float64)
+	}
 	return nil
 }
 
@@ -163,7 +217,7 @@ func TestMessageProcessingService_ProcessPendingMessages(t *testing.T) {
 				mockRepo.shouldFailOp = tt.shouldFailRepo
 			}
 
-			service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheService())
+			service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheServiceForProcessing())
 			ctx := context.Background()
 
 			result, err := service.ProcessPendingMessages(ctx, tt.batchSize)
@@ -255,7 +309,7 @@ func TestMessageProcessingService_GetProcessingStatus(t *testing.T) {
 				mockRepo.shouldFailOp = tt.shouldFailRepo
 			}
 
-			service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheService())
+			service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheServiceForProcessing())
 			ctx := context.Background()
 
 			result, err := service.GetProcessingStatus(ctx)
@@ -320,7 +374,7 @@ func TestMessageProcessingService_ProcessMessage_Integration(t *testing.T) {
 			testMessages = append(testMessages, testMsg)
 		}
 
-		service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheService())
+		service := usecaseImpl.NewMessageProcessingService(mockRepo, &mockWebhookService{}, newMockCacheServiceForProcessing())
 		ctx := context.Background()
 
 		// Process the messages
