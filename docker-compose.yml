@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: msg-dispatcher-postgres
+    environment:
+      POSTGRES_DB: message_dispatcher
+      POSTGRES_USER: msg_dispatcher_user
+      POSTGRES_PASSWORD: msg_dispatcher_pass123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./internal/adapters/secondary/repositories/postgres/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U msg_dispatcher_user -d message_dispatcher"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - msg-dispatcher-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: msg-dispatcher-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - msg-dispatcher-network
+
+  # Message Dispatcher Application
+  app:
+    build: .
+    container_name: msg-dispatcher-app
+    environment:
+      # Application
+      APP_ENV: development
+      PORT: 8080
+      API_KEY: dev-api-key-123
+      LOG_LEVEL: debug
+      
+      # Database
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: msg_dispatcher_user
+      DB_PASSWORD: msg_dispatcher_pass123
+      DB_NAME: message_dispatcher
+      DB_SSL_MODE: disable
+      
+      # Redis
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ""
+      REDIS_DB: 0
+      
+      # Webhook (replace with your webhook URL)
+      WEBHOOK_URL: https://webhook.site/a25c4f75-0f22-47f4-9def-dbdac00515ae
+      WEBHOOK_TIMEOUT: 30s
+      WEBHOOK_MAX_RETRIES: 3
+      
+      # Scheduler
+      SCHEDULER_ENABLED: true
+      SCHEDULER_INTERVAL: 2m
+      SCHEDULER_BATCH_SIZE: 2
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - msg-dispatcher-network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  msg-dispatcher-network:
+    driver: bridge 
